@@ -77,8 +77,7 @@ uint64_t interrupt_handler(uint64_t rsp) {
     } else if (int_no == 3 || int_no == 4) {
         console_print("[idt] idt diag called\n");
     } else if (int_no < 32) {
-        console_clear(0x8B0000);
-        console_print("kernel panic\n");
+        console_print("\n\n!!! kernel panic !!!\n");
         console_print("exception: ");
         console_print(exception_messages[int_no]);
         console_print("\nerror code: ");
