@@ -15,7 +15,9 @@ Barium is a minimal x86_64 UEFI kernel with some modern features.
 - `make`
 
 ### building
-just run make:
+see [BUILDING.md](BUILDING.md) [WIP] for a full step-by-step guide on how to set up your environment.
+
+if you already have everything set up, just run:
 ```bash
 make
 ```
