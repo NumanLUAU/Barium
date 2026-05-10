@@ -567,8 +567,8 @@ void shell_run() {
         else if (b_strcmp(cmd, "timertest") == 0) timertest();
         else if (b_strcmp(cmd, "schedtest") == 0) schedtest();
         else if (b_strcmp(cmd, "ringtest") == 0) ringtest();
-        else if (b_strcmp(cmd, "userstresstest") == 0) ring3_test();
-        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, gdttest, tsstest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest, ringtest, userstresstest\n");
+        else if (b_strcmp(cmd, "beast") == 0) ring3_test();
+        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, gdttest, tsstest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest, ringtest, beast\n");
         else if (pos > 0) console_print("unknown command\n");
     }
 }
