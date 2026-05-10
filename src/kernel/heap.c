@@ -23,7 +23,7 @@ void heap_init() {
 
 void *kmalloc(size_t size) {
     if (size == 0) return NULL;
-    
+    __asm__ volatile ("cli");
     size = (size + 7) & ~7;
     
     heap_block_t *current = heap_start;
@@ -40,17 +40,19 @@ void *kmalloc(size_t size) {
                 current->next = new_block;
             }
             current->free = 0;
-            return (void*)((uint8_t*)current + sizeof(heap_block_t));
+            void *ret = (void*)((uint8_t*)current + sizeof(heap_block_t));
+            __asm__ volatile ("sti");
+            return ret;
         }
         current = current->next;
     }
-    
+    __asm__ volatile ("sti");
     return NULL;
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
-    
+    __asm__ volatile ("cli");
     heap_block_t *block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));
     if (block->magic != HEAP_MAGIC) return;
     
@@ -65,4 +67,5 @@ void kfree(void *ptr) {
         }
         current = current->next;
     }
+    __asm__ volatile ("sti");
 }

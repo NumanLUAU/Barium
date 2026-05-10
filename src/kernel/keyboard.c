@@ -45,9 +45,7 @@ void keyboard_handler() {
 }
 
 char keyboard_get_char() {
-    while (kbd_head == kbd_tail) {
-        __asm__ volatile("pause");
-    }
+    if (kbd_head == kbd_tail) return 0;
     char c = kbd_buffer[kbd_tail];
     kbd_tail = (kbd_tail + 1) % 128;
     return c;

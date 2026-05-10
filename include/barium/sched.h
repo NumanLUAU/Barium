@@ -31,13 +31,17 @@ typedef struct thread {
     uint64_t wakeup_tick;
     void *stack_limit;
     void *stack_top;
+    void *user_stack_limit;
+    void *user_stack_top;
     struct thread *next;
 } thread_t;
 
 void sched_init();
 uint64_t sched_spawn(void (*entry)(), uint8_t priority);
+uint64_t sched_spawn_user(void (*entry)(), uint8_t priority);
 uint64_t sched_reschedule(uint64_t current_rsp);
 uint64_t sched_get_tid();
+int sched_is_alive(uint64_t tid);
 void sched_exit();
 void sched_yield();
 void sched_sleep(uint64_t ms);

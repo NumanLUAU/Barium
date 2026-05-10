@@ -34,9 +34,19 @@ isr_common_stub:
     push rbx
     push rax
 
+    test qword [rsp + 144], 3
+    jz .no_swap
+    swapgs
+.no_swap:
+
     mov rdi, rsp
     call interrupt_handler
     mov rsp, rax 
+
+    test qword [rsp + 144], 3
+    jz .no_swap_back
+    swapgs
+.no_swap_back:
 
     pop rax
     pop rbx

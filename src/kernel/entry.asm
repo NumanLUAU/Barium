@@ -2,9 +2,13 @@
 extern kmain
 global _start
 global gdt_load
+global tss_load
 global get_cs
 global get_ds
 global get_ss
+global get_tr
+global get_lar
+global get_lsl
 
 section .text
 extern __bss_start
@@ -38,6 +42,11 @@ gdt_load:
     push rdi
     retfq
 
+tss_load:
+    mov ax, 0x28
+    ltr ax
+    ret
+
 
 
 get_cs:
@@ -50,6 +59,18 @@ get_ds:
 
 get_ss:
     mov rax, ss
+    ret
+
+get_tr:
+    str rax
+    ret
+
+get_lar:
+    lar rax, rdi
+    ret
+
+get_lsl:
+    lsl rax, rdi
     ret
 
 

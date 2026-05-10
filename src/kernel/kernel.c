@@ -5,6 +5,8 @@
 #include <barium/vmm.h>
 #include <barium/heap.h>
 #include <barium/apic.h>
+#include <barium/cpu.h>
+#include <barium/syscall.h>
 #include <barium/keyboard.h>
 #include <barium/shell.h>
 #include <barium/pmm.h>
@@ -21,14 +23,14 @@ void kmain(barium_boot_info_t *info) {
     vmm_init(info);
     heap_init();
     apic_init(info);
+    cpu_init();
+    syscall_init();
     sched_init();
     keyboard_init();
 
     console_print("barium ready\n");
 
     __asm__ volatile("sti");
-
-    shell_run();
 
     while (1) __asm__ volatile("hlt");
 }

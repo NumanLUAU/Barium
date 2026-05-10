@@ -87,6 +87,14 @@ uint64_t interrupt_handler(uint64_t rsp) {
         vmm_map(pml4, fault_addr & ~0xFFF, phys, PAGE_PRESENT | PAGE_WRITABLE); 
         return rsp;
     } else if (int_no < 32) {
+        if ((ctx->cs & 3) == 3) {
+            console_print("user exception: ");
+            console_print(exception_messages[int_no]);
+            console_print(" at ");
+            console_print_hex(ctx->rip);
+            console_newline();
+            sched_exit();
+        }
         console_clear(0x8B0000);
         console_print("kernel panic\n");
         console_print("exception: ");

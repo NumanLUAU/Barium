@@ -3,6 +3,8 @@
 #include <barium/lib.h>
 #include <barium/console.h>
 #include <barium/gdt.h>
+#include <barium/cpu.h>
+#include <barium/shell.h>
 
 extern uint64_t apic_get_ticks();
 
@@ -28,12 +30,15 @@ void sched_init() {
     idle->stack_top = (void*)((uint64_t)stack + 8192);
     idle->next = NULL;
     current_thread = idle;
+
+    sched_spawn(shell_run, 10);
 }
 
 uint64_t sched_spawn(void (*entry)(), uint8_t priority) {
     if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
 
     thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
+    b_memset(thread, 0, sizeof(thread_t));
     void *stack = kmalloc(8192);
     uint64_t *ptr = (uint64_t*)((uint64_t)stack + 8192);
     
@@ -65,13 +70,55 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority) {
     return thread->tid;
 }
 
+uint64_t sched_spawn_user(void (*entry)(), uint8_t priority) {
+    if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
 
+    thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
+    b_memset(thread, 0, sizeof(thread_t));
+    void *kstack = kmalloc(8192);
+    void *ustack = kmalloc(8192);
+    uint64_t *ptr = (uint64_t*)((uint64_t)kstack + 8192);
+    
+    *(--ptr) = 0x1B;             
+    *(--ptr) = (uint64_t)ustack + 8192; 
+    *(--ptr) = 0x202;            
+    *(--ptr) = 0x23;             
+    *(--ptr) = (uint64_t)entry;  
+    
+    *(--ptr) = 0; 
+    *(--ptr) = 0; 
+    
+    for (int i = 0; i < 15; i++) *(--ptr) = 0;
+
+    __asm__ volatile ("cli");
+    thread->tid = next_tid++;
+    thread->rsp = (uint64_t)ptr;
+    thread->state = THREAD_READY;
+    thread->priority = priority;
+    thread->ticks_remaining = (MAX_PRIORITY - priority + 1) * 2;
+    thread->total_ticks = 0;
+    thread->stack_limit = kstack;
+    thread->stack_top = (void*)((uint64_t)kstack + 8192);
+    thread->user_stack_limit = ustack;
+    thread->user_stack_top = (void*)((uint64_t)ustack + 8192);
+
+    thread->next = ready_queues[priority];
+    ready_queues[priority] = thread;
+    __asm__ volatile ("sti");
+
+    return thread->tid;
+}
 
 static void sched_age_threads() {
     for (int p = 0; p < MAX_PRIORITY; p++) {
         thread_t *prev = NULL;
         thread_t *curr = ready_queues[p];
         while (curr) {
+            if (curr->tid == 1) {
+                prev = curr;
+                curr = curr->next;
+                continue;
+            }
             curr->total_ticks++; 
             if (curr->total_ticks > 19) { 
                 curr->total_ticks = 0;
@@ -131,12 +178,6 @@ uint64_t sched_reschedule(uint64_t current_rsp) {
                 
                 thread_t *next = ready_queues[p];
                 ready_queues[p] = next->next;
-
-                if (p > current_thread->priority) {
-                    console_print("[sched] switching to tid ");
-                    console_print_hex(next->tid);
-                    console_newline();
-                }
                 
                 if (current_thread->state == THREAD_RUNNING) {
                     current_thread->state = THREAD_READY;
@@ -153,7 +194,8 @@ uint64_t sched_reschedule(uint64_t current_rsp) {
                 } else if (current_thread->state == THREAD_SLEEPING) {
                     current_thread->next = sleep_queue;
                     sleep_queue = current_thread;
-                } else if (current_thread->state == 0 && current_thread->priority != 0) {
+                } else if (current_thread->state == THREAD_DEAD && current_thread->priority != 0) {
+                    if (current_thread->user_stack_limit) kfree(current_thread->user_stack_limit);
                     kfree(current_thread->stack_limit);
                     kfree(current_thread);
                 }
@@ -161,6 +203,9 @@ uint64_t sched_reschedule(uint64_t current_rsp) {
                 next->state = THREAD_RUNNING;
                 current_thread = next;
                 
+                tss_set_stack((uint64_t)current_thread->stack_top);
+                cpu_get()->kernel_stack = (uint64_t)current_thread->stack_top;
+
                 return current_thread->rsp;
             }
             break;
@@ -173,7 +218,7 @@ uint64_t sched_reschedule(uint64_t current_rsp) {
 void sched_exit() {
     __asm__ volatile ("cli");
     if (current_thread) {
-        current_thread->state = 0;
+        current_thread->state = THREAD_DEAD;
     }
     __asm__ volatile ("sti");
     while(1) __asm__ volatile ("hlt"); 
@@ -190,9 +235,26 @@ void sched_sleep(uint64_t ms) {
         current_thread->wakeup_tick = apic_get_ticks() + (ms / 10);
     }
     __asm__ volatile ("sti");
-    sched_yield();
+    while (sched_is_alive(current_thread->tid) && current_thread->state == THREAD_SLEEPING) { sched_yield(); }
 }
 
 uint64_t sched_get_tid() {
     return current_thread ? current_thread->tid : 0;
+}
+
+int sched_is_alive(uint64_t tid) {
+    if (current_thread && current_thread->tid == tid) return 1;
+    for (int p = 0; p <= MAX_PRIORITY; p++) {
+        thread_t *curr = ready_queues[p];
+        while (curr) {
+            if (curr->tid == tid) return 1;
+            curr = curr->next;
+        }
+    }
+    thread_t *curr_sleep = sleep_queue;
+    while (curr_sleep) {
+        if (curr_sleep->tid == tid) return 1;
+        curr_sleep = curr_sleep->next;
+    }
+    return 0;
 }
