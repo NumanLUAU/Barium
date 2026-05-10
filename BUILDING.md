@@ -50,7 +50,7 @@ this will create `barium.img`.
 ## 6. run it
 to test it in qemu:
 ```bash
-qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive format=raw,file=barium.img
+make run-img
 ```
 
 ## tips

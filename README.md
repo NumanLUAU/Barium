@@ -15,7 +15,7 @@ Barium is a minimal x86_64 UEFI kernel with some modern features.
 - `make`
 
 ### building
-see [BUILDING.md](BUILDING.md) [WIP] for a full step-by-step guide on how to set up your environment.
+see [BUILDING.md](BUILDING.md) for a full step-by-step guide on how to set up your environment.
 
 if you already have everything set up, just run:
 ```bash
@@ -23,11 +23,6 @@ make
 ```
 this produces `barium.img`, a bootable fat32 disk image containing the uefi bootloader (`/EFI/BOOT/BOOTX64.EFI`) and the kernel (`/kernel.bin`)
 
-### testing
-you can run it in qemu:
-```bash
-qemu-system-x86_64 -bios /path/to/ovmf.fd -drive format=raw,file=barium.img
-```
-once in the shell, use `help` to see available commands 
+### note
 
 If you want to test on real devices, you can flash Barium.img to your flash drive and put that in any computer that has UEFI support. Please keep in mind that if your device does not have a PS/2 chip, it will not work.
