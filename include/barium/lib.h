@@ -11,5 +11,6 @@ void b_memset(void *s, uint8_t c, size_t n);
 int b_strcmp(const char *s1, const char *s2);
 void b_memcpy(void *dest, const void *src, size_t n);
 void b_sleep(uint32_t ms);
+uint64_t b_get_cr2();
 
 #endif

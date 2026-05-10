@@ -74,6 +74,25 @@ void vmm_map(pml4_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags) {
     __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
+uint64_t vmm_get_phys(pml4_t *pml4, uint64_t virt) {
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pd_idx   = (virt >> 21) & 0x1FF;
+    uint64_t pt_idx   = (virt >> 12) & 0x1FF;
+
+    if (!(pml4[pml4_idx] & PAGE_PRESENT)) return 0;
+    uint64_t *pdpt = (uint64_t*)(pml4[pml4_idx] & ~0xFFF);
+
+    if (!(pdpt[pdpt_idx] & PAGE_PRESENT)) return 0;
+    uint64_t *pd = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
+
+    if (!(pd[pd_idx] & PAGE_PRESENT)) return 0;
+    uint64_t *pt = (uint64_t*)(pd[pd_idx] & ~0xFFF);
+
+    if (!(pt[pt_idx] & PAGE_PRESENT)) return 0;
+    return (pt[pt_idx] & ~0xFFF);
+}
+
 pml4_t *vmm_get_kernel_pml4() {
     return kernel_pml4;
 }

@@ -4,6 +4,9 @@
 #include <barium/keyboard.h>
 #include <barium/apic.h>
 #include <barium/sched.h>
+#include <barium/vmm.h>
+
+extern volatile int vmm_test_active;
 
 static idt_entry_t idt[256] __attribute__((aligned(16)));
 static idtr_t idtr;
@@ -76,6 +79,13 @@ uint64_t interrupt_handler(uint64_t rsp) {
         keyboard_handler();
     } else if (int_no == 3 || int_no == 4) {
         console_print("[idt] idt diag called\n");
+    } else if (int_no == 14 && vmm_test_active) {
+        uint64_t fault_addr = b_get_cr2();
+        pml4_t *pml4 = vmm_get_kernel_pml4();
+        uint64_t phys = vmm_get_phys(pml4, fault_addr);
+        
+        vmm_map(pml4, fault_addr & ~0xFFF, phys, PAGE_PRESENT | PAGE_WRITABLE); 
+        return rsp;
     } else if (int_no < 32) {
         console_clear(0x8B0000);
         console_print("kernel panic\n");

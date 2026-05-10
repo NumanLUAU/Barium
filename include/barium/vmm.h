@@ -16,6 +16,7 @@ typedef uint64_t pml4_t;
 void vmm_init(barium_boot_info_t *info);
 void vmm_map(pml4_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags);
 void vmm_map_large(pml4_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags);
+uint64_t vmm_get_phys(pml4_t *pml4, uint64_t virt);
 pml4_t* vmm_get_kernel_pml4();
 
 #endif

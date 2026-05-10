@@ -9,6 +9,8 @@
 #include <barium/apic.h>
 #include <barium/sched.h>
 
+volatile int vmm_test_active = 0; //may be a bad idea in the future but for now its fine
+
 extern uint64_t get_cs();
 extern uint64_t get_ds();
 extern uint64_t get_ss();
@@ -100,23 +102,14 @@ void vmmtest() {
     pml4_t *pml4 = vmm_get_kernel_pml4();
     console_print("pml4=");
     console_print_hex((uint64_t)pml4);
-    console_newline();
-
-    console_print("stage 1: alias\n");
     void *phys_page = pmm_alloc();
-    uint64_t virt_addr = 0xDEADBEEF000;
     
-    vmm_map(pml4, virt_addr, (uint64_t)phys_page, PAGE_PRESENT | PAGE_WRITABLE);
-    console_print("mapped ");
-    console_print_hex((uint64_t)phys_page);
-    console_print(" -> ");
-    console_print_hex(virt_addr);
-    console_newline();
-
-    uint64_t *ptr = (uint64_t*)virt_addr;
-    *ptr = 0x1234567887654321;
+    console_print("stage 1: alias\n");
+    vmm_map(pml4, 0xDEADBEEF000, (uint64_t)phys_page, PAGE_PRESENT | PAGE_WRITABLE);
+    uint64_t *ptr1 = (uint64_t*)0xDEADBEEF000;
+    *ptr1 = 0x12345678;
     
-    if (*(uint64_t*)phys_page == 0x1234567887654321) {
+    if (*ptr1 == 0x12345678) {
         console_print("alias ok\n");
     } else {
         console_print("alias broke\n");
@@ -127,10 +120,16 @@ void vmmtest() {
     vmm_map(pml4, 0xCAFEBABE000, (uint64_t)phys_page, PAGE_PRESENT);
     console_print("trying illegal write\n");
     
+    vmm_test_active = 1;
     uint64_t *bad_ptr = (uint64_t*)0xCAFEBABE000;
     *bad_ptr = 0x666;
+    vmm_test_active = 0;
 
-    console_print("stage 2: failed\n");
+    if (*bad_ptr == 0x666) {
+        console_print("stage 2: ok (recovered)\n");
+    } else {
+        console_print("stage 2: failed\n");
+    }
 }
 
 void heaptest() {
