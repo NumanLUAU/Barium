@@ -34,7 +34,7 @@ isr_common_stub:
     push rbx
     push rax
 
-    test qword [rsp + 144], 3
+    test qword [rsp + 152], 3
     jz .no_swap
     swapgs
 .no_swap:
@@ -43,7 +43,7 @@ isr_common_stub:
     call interrupt_handler
     mov rsp, rax 
 
-    test qword [rsp + 144], 3
+    test qword [rsp + 152], 3
     jz .no_swap_back
     swapgs
 .no_swap_back:
