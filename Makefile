@@ -22,12 +22,9 @@ KERN_SRCS = src/kernel/kernel.c \
             src/kernel/lib.c \
             src/kernel/shell.c \
             src/kernel/pmm.c \
-            src/kernel/sched.c \
-            src/kernel/syscall.c \
-            src/kernel/cpu.c
+            src/kernel/sched.c
 KERN_OBJS = build/entry.o \
             build/interrupt.o \
-            build/syscall_entry.o \
             $(KERN_SRCS:src/kernel/%.c=build/%.o)
 KERN_BIN = bin/kernel.bin
 
@@ -46,10 +43,6 @@ build/entry.o: src/kernel/entry.asm
 	$(NASM) -f elf64 $< -o $@
 
 build/interrupt.o: src/kernel/interrupt.asm
-	@mkdir -p build
-	$(NASM) -f elf64 $< -o $@
-
-build/syscall_entry.o: src/kernel/syscall_entry.asm
 	@mkdir -p build
 	$(NASM) -f elf64 $< -o $@
 

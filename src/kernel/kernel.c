@@ -9,8 +9,6 @@
 #include <barium/shell.h>
 #include <barium/pmm.h>
 #include <barium/sched.h>
-#include <barium/syscall.h>
-#include <barium/cpu.h>
 
 void kmain(barium_boot_info_t *info) {
     console_init(info);
@@ -18,8 +16,6 @@ void kmain(barium_boot_info_t *info) {
     console_print("barium kernel v0.4\n");
 
     gdt_init();
-    cpu_init();
-    syscall_init();
     pmm_init(info);
     idt_init();
     vmm_init(info);

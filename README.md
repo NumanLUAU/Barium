@@ -3,10 +3,8 @@
 Barium is a minimal x86_64 UEFI kernel with some modern features.
 
 ### features
-- **Ring 3**: hardware enforced user-mode isolation
 - **Scheduler**: multi-threaded with 32 priority levels and round-robin fairness
 - **Memory**: dual-stack memory management
-- **Syscalls**: (extremely) simple syscall interface for ring 3 apps
 - **Shell**: minimal interactive shell
 - **PS/2 Support**: Barium does not have xHCI or EHCI yet, so you'll have to test in QEMU or a PS/2 supported device.
 

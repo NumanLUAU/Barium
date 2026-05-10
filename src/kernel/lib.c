@@ -14,18 +14,6 @@ void b_io_wait() {
     b_outb(0x80, 0);
 }
 
-void b_wrmsr(uint32_t msr, uint64_t val) {
-    uint32_t low = val & 0xFFFFFFFF;
-    uint32_t high = (val >> 32) & 0xFFFFFFFF;
-    __asm__ volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
-}
-
-uint64_t b_rdmsr(uint32_t msr) {
-    uint32_t low, high;
-    __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((uint64_t)high << 32) | low;
-}
-
 void b_memset(void *s, uint8_t c, size_t n) {
     uint8_t *p = (uint8_t*)s;
     for (size_t i = 0; i < n; i++) p[i] = c;

@@ -8,15 +8,10 @@
 #include <barium/heap.h>
 #include <barium/apic.h>
 #include <barium/sched.h>
-#include <barium/syscall.h>
 
 extern uint64_t get_cs();
 extern uint64_t get_ds();
 extern uint64_t get_ss();
-extern uint64_t get_tr();
-void user_mode_worker();
-extern uint64_t get_lar(uint64_t selector);
-extern uint64_t get_lsl(uint64_t selector);
 
 void gdttest() {
     console_print("testing gdt\n");
@@ -45,14 +40,6 @@ void gdttest() {
     );
     __asm__ volatile("mfence" : : : "memory");
 
-    uint64_t cs_lar = get_lar(0x08);
-    uint64_t cs_lsl = get_lsl(0x08);
-    console_print("k-code: lar=");
-    console_print_hex(cs_lar);
-    console_print(" lsl=");
-    console_print_hex(cs_lsl);
-    console_newline();
-
     void *actual_base = gdt_get_base();
     gdt_entry_t *entries = (gdt_entry_t*)actual_base;
     if (entries[1].access & 0x01) console_print("k-code ok\n");
@@ -61,26 +48,7 @@ void gdttest() {
     console_print("gdt works\n");
 }
 
-void tsstest() {
-    console_print("testing tss\n");
-    uint16_t tr = (uint16_t)get_tr();
-    console_print("tr=");
-    console_print_hex(tr);
-    console_newline();
 
-    uint64_t tss_lar = get_lar(0x28);
-    uint64_t tss_lsl = get_lsl(0x28);
-    console_print("lar=");
-    console_print_hex(tss_lar);
-    console_print(" lsl=");
-    console_print_hex(tss_lsl);
-    console_newline();
-
-    if (tss_lsl == 103) console_print("limit ok\n");
-    if ((tss_lar & 0x0F00) == 0x0B00) console_print("tss busy\n");
-
-    console_print("tss works\n");
-}
 
 void pmmtest() {
     console_print("testing pmm\n");
@@ -480,70 +448,6 @@ void schedtest() {
     console_print("\nsched ok\n");
 }
 
-void ringtest() {
-    console_print("ring3 test\n");
-    sched_spawn_user(user_mode_worker, 15);
-    b_sleep(500);
-    console_print("done\n");
-}
-
-void user_mode_worker() {
-    const char *msg = "hello from ring 3\n";
-    __asm__ volatile (
-        "syscall\n"
-        : 
-        : "a"(1), "D"(msg) 
-        : "rcx", "r11", "memory"
-    );
-    
-    __asm__ volatile (
-        "syscall\n"
-        : 
-        : "a"(3) 
-        : "rcx", "r11", "memory"
-    );
-}
-
-void user_a() {
-    for (int i = 0; i < 100; i++) {
-        __asm__ volatile ("syscall" : : "a"(2) : "rcx", "r11", "memory");
-    }
-    const char *done = "a done\n";
-    __asm__ volatile ("syscall" : : "a"(1), "D"(done) : "rcx", "r11", "memory");
-    __asm__ volatile ("syscall" : : "a"(3) : "rcx", "r11", "memory");
-}
-
-void user_b() {
-    for (int i = 0; i < 50; i++) {
-        const char *msg = ".";
-        __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11", "memory");
-    }
-    const char *done = "\nb done\n";
-    __asm__ volatile ("syscall" : : "a"(1), "D"(done) : "rcx", "r11", "memory");
-    __asm__ volatile ("syscall" : : "a"(3) : "rcx", "r11", "memory");
-}
-
-void user_c() {
-    const char *msg = "trying hlt\n";
-    __asm__ volatile ("syscall" : : "a"(1), "D"(msg) : "rcx", "r11", "memory");
-    
-    __asm__ volatile ("hlt");
-    
-    const char *fail = "fail\n";
-    __asm__ volatile ("syscall" : : "a"(1), "D"(fail) : "rcx", "r11", "memory");
-    __asm__ volatile ("syscall" : : "a"(3) : "rcx", "r11", "memory");
-}
-
-void ring3_test() {
-    console_print("ring 3 test\n");
-    sched_spawn_user(user_a, 10);
-    sched_spawn_user(user_b, 10);
-    sched_spawn_user(user_c, 10);
-    
-    b_sleep(1000);
-    console_print("done\n");
-}
-
 void shell_run() {
     char cmd[64];
     int pos = 0;
@@ -559,16 +463,13 @@ void shell_run() {
             else if (c >= 32 && c <= 126) { if (pos < 63) { cmd[pos++] = (char)c; console_putc((char)c); } }
         }
         if (b_strcmp(cmd, "gdttest") == 0) gdttest();
-        else if (b_strcmp(cmd, "tsstest") == 0) tsstest();
         else if (b_strcmp(cmd, "pmmtest") == 0) pmmtest();
         else if (b_strcmp(cmd, "idttest") == 0) idttest();
         else if (b_strcmp(cmd, "vmmtest") == 0) vmmtest();
         else if (b_strcmp(cmd, "heaptest") == 0) heaptest();
         else if (b_strcmp(cmd, "timertest") == 0) timertest();
         else if (b_strcmp(cmd, "schedtest") == 0) schedtest();
-        else if (b_strcmp(cmd, "ringtest") == 0) ringtest();
-        else if (b_strcmp(cmd, "userstresstest") == 0) ring3_test();
-        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, gdttest, tsstest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest, ringtest, userstresstest\n");
+        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, gdttest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
         else if (pos > 0) console_print("unknown command\n");
     }
 }
