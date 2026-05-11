@@ -1,6 +1,8 @@
+TOOLCHAIN_PATH = $(HOME)/barium-toolchain/bin
 CC_BOOT = x86_64-w64-mingw32-gcc
-CC_KERN = /home/pixel/barium-toolchain/bin/x86_64-elf-gcc
-LD_KERN = /home/pixel/barium-toolchain/bin/x86_64-elf-ld
+CC_KERN = $(TOOLCHAIN_PATH)/x86_64-elf-gcc
+LD_KERN = $(TOOLCHAIN_PATH)/x86_64-elf-ld
+OBJCOPY_KERN = $(TOOLCHAIN_PATH)/x86_64-elf-objcopy
 NASM = nasm
 
 CFLAGS_BOOT = -ffreestanding -fshort-wchar -Iinclude -Wall -Wextra
@@ -70,7 +72,7 @@ KERN_ELF = bin/kernel.elf
 $(KERN_BIN): $(KERN_OBJS)
 	@mkdir -p bin
 	$(LD_KERN) $(LDFLAGS_KERN) -o $(KERN_ELF) $(KERN_OBJS)
-	/home/pixel/barium-toolchain/bin/x86_64-elf-objcopy -O binary $(KERN_ELF) $@
+	$(OBJCOPY_KERN) -O binary $(KERN_ELF) $@
 
 $(IMG): $(BOOT_EFI) $(KERN_BIN)
 	dd if=/dev/zero of=$(IMG) bs=1M count=64
