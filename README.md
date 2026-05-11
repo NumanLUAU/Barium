@@ -14,7 +14,6 @@ Barium is a minimal x86_64 UEFI kernel with some modern features.
 - `mtools` and `dosfstools`
 - `make`
 - `build-essential`
-- `ovmf`
 - `bison` and `flex`
 - `curl`
 - `texinfo`
