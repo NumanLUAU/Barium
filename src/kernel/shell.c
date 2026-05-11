@@ -528,11 +528,14 @@ void schedtest() {
     console_print("\nsched ok\n");
 }
 
+static volatile int active_workers = 0;
+static spinlock_t worker_lock;
+
 static void core_worker() {
     uint32_t id = apic_get_id();
     console_print("worker starting on core ");
     console_print_hex(id);
-    console_newline();
+    console_print("\n");
 
     for (int i = 0; i < 5; i++) {
         b_sleep(500);
@@ -543,6 +546,13 @@ static void core_worker() {
     }
     
     console_print("worker done\n");
+    
+    uint64_t flags = b_irq_save();
+    spin_lock(&worker_lock);
+    active_workers--;
+    spin_unlock(&worker_lock);
+    b_irq_restore(flags);
+
     sched_exit();
 }
 
@@ -550,15 +560,26 @@ void coretest() {
     uint32_t count = acpi_get_cpu_count();
     uint32_t workers = count * 2;
 
-    console_print("detected ");
-    console_print_hex(count);
-    console_print(" cores. spawning ");
-    console_print_hex(workers);
-    console_print(" workers\n");
+    uint64_t c_flags = console_lock_acquire();
+    console_print_unlocked("detected ");
+    console_print_hex_unlocked(count);
+    console_print_unlocked(" cores. spawning ");
+    console_print_hex_unlocked(workers);
+    console_print_unlocked(" workers\n");
+    console_lock_release(c_flags);
+
+    active_workers = workers;
+    worker_lock.lock = 0;
 
     for (uint32_t i = 0; i < workers; i++) {
         sched_spawn(core_worker, 10, "worker");
     }
+
+    while (active_workers > 0) {
+        sched_yield();
+    }
+    
+    console_print("coretest complete\n");
 }
 
 void shell_run() {
