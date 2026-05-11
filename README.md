@@ -13,6 +13,19 @@ Barium is a minimal x86_64 UEFI kernel with some modern features.
 - `x86_64-w64-mingw32-gcc`
 - `mtools` and `dosfstools`
 - `make`
+- `build-essntial`
+- `ovmf`
+- `bison` and `flex`
+- `curl`
+- `texinfo`
+- `libgmp3-dev`, `libmpfr-dev`, `libmpc-dev`
+- `gcc`
+- `qemu-system-x86_64`
+- `wsl2`(if you're on windows)
+- `git`
+- `nasm`
+
+these are just listed incase people want to see if their system has them, it's better however to just do everything from [BUILDING.md](BUILDING.md)
 
 ### building
 see [BUILDING.md](BUILDING.md) for a full step-by-step guide on how to set up your environment.
