@@ -5,42 +5,50 @@
 #include <barium/gdt.h>
 #include <barium/cpu.h>
 #include <barium/shell.h>
+#include <barium/apic.h>
 
-extern uint64_t apic_get_ticks();
-
-static thread_t *ready_queues[MAX_PRIORITY + 1];
-static thread_t *sleep_queue = NULL;
 static uint64_t next_tid = 1;
-static uint64_t total_sched_ticks = 0;
-static spinlock_t sched_lock;
+static spinlock_t global_sched_lock;
+static uint32_t next_cpu_index = 0;
 
-#define current_thread ((thread_t*)cpu_get()->sched_thread)
-#define set_current_thread(t) (cpu_get()->sched_thread = (void*)(t))
+typedef struct {
+    thread_t *sleep_queue;
+} cpu_extra_t;
+
+static cpu_extra_t cpu_extras[64];
+
+#define current_thread (cpu_get()->sched_thread)
 
 void sched_init() {
+    cpu_t *cpu = cpu_get();
+    
+    uint64_t flags = b_irq_save();
+    if (next_tid == 1) {
+        global_sched_lock.lock = 0;
+        b_memset(cpu_extras, 0, sizeof(cpu_extras));
+    }
+    
     thread_t *idle = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(idle, 0, sizeof(thread_t));
     void *stack = kmalloc(8192);
     
-    uint64_t flags = b_irq_save();
-    spin_lock(&sched_lock);
-    if (next_tid == 1) {
-        b_memset(ready_queues, 0, sizeof(ready_queues));
-        sleep_queue = NULL;
-        total_sched_ticks = 0;
-    }
-    
+    spin_lock(&global_sched_lock);
     idle->tid = next_tid++;
+    spin_unlock(&global_sched_lock);
+    
     idle->state = THREAD_RUNNING;
     idle->priority = 0;
-    
     b_strcpy(idle->name, "idle");
     idle->stack_limit = stack;
     idle->stack_top = (void*)((uint64_t)stack + 8192);
     idle->next = NULL;
-    set_current_thread(idle);
     
-    spin_unlock(&sched_lock);
+    cpu->sched_thread = idle;
+    b_memset(cpu->ready_queues, 0, sizeof(cpu->ready_queues));
+    cpu->sched_lock.lock = 0;
+    
+    cpu_extras[cpu->cpu_id].sleep_queue = NULL;
+
     b_irq_restore(flags);
 }
 
@@ -50,9 +58,7 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
     thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(thread, 0, sizeof(thread_t));
     
-    if (name) {
-        b_strcpy(thread->name, name);
-    }
+    if (name) b_strcpy(thread->name, name);
 
     void *stack = kmalloc(8192);
     uint64_t *ptr = (uint64_t*)((uint64_t)stack + 8192);
@@ -62,28 +68,34 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
     *(--ptr) = 0x202;            
     *(--ptr) = 0x08;             
     *(--ptr) = (uint64_t)entry;  
-    
     *(--ptr) = 0; 
     *(--ptr) = 0; 
-    
     for (int i = 0; i < 15; i++) *(--ptr) = 0;
 
     uint64_t flags = b_irq_save();
-    spin_lock(&sched_lock);
+    spin_lock(&global_sched_lock);
     thread->tid = next_tid++;
+    
+    uint32_t target_idx = next_cpu_index;
+    next_cpu_index = (next_cpu_index + 1) % cpu_get_count();
+    spin_unlock(&global_sched_lock);
+
+    cpu_t *target_cpu = cpu_get_by_index(target_idx);
+    
     thread->rsp = (uint64_t)ptr;
     thread->state = THREAD_READY;
     thread->priority = priority;
     thread->ticks_remaining = (MAX_PRIORITY - priority + 1) * 2;
-    thread->total_ticks = 0;
     thread->stack_limit = stack;
     thread->stack_top = (void*)((uint64_t)stack + 8192);
+    thread->core_affinity = (uint8_t)target_cpu->cpu_id;
 
-    thread->next = ready_queues[priority];
-    ready_queues[priority] = thread;
-    spin_unlock(&sched_lock);
+    spin_lock(&target_cpu->sched_lock);
+    thread->next = target_cpu->ready_queues[priority];
+    target_cpu->ready_queues[priority] = thread;
+    spin_unlock(&target_cpu->sched_lock);
+    
     b_irq_restore(flags);
-
     return thread->tid;
 }
 
@@ -92,12 +104,7 @@ uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
 
     thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(thread, 0, sizeof(thread_t));
-    
-    if (name) {
-        int i;
-        for (i = 0; i < 15 && name[i]; i++) thread->name[i] = name[i];
-        thread->name[i] = '\0';
-    }
+    if (name) b_strcpy(thread->name, name);
 
     void *kstack = kmalloc(8192);
     void *ustack = kmalloc(8192);
@@ -108,55 +115,54 @@ uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
     *(--ptr) = 0x202;            
     *(--ptr) = 0x23;             
     *(--ptr) = (uint64_t)entry;  
-    
     *(--ptr) = 0; 
     *(--ptr) = 0; 
-    
     for (int i = 0; i < 15; i++) *(--ptr) = 0;
 
     uint64_t flags = b_irq_save();
-    spin_lock(&sched_lock);
+    spin_lock(&global_sched_lock);
     thread->tid = next_tid++;
+    uint32_t target_idx = next_cpu_index;
+    next_cpu_index = (next_cpu_index + 1) % cpu_get_count();
+    spin_unlock(&global_sched_lock);
+
+    cpu_t *target_cpu = cpu_get_by_index(target_idx);
+
     thread->rsp = (uint64_t)ptr;
     thread->state = THREAD_READY;
     thread->priority = priority;
     thread->ticks_remaining = (MAX_PRIORITY - priority + 1) * 2;
-    thread->total_ticks = 0;
     thread->stack_limit = kstack;
     thread->stack_top = (void*)((uint64_t)kstack + 8192);
     thread->user_stack_limit = ustack;
     thread->user_stack_top = (void*)((uint64_t)ustack + 8192);
+    thread->core_affinity = (uint8_t)target_cpu->cpu_id;
 
-    thread->next = ready_queues[priority];
-    ready_queues[priority] = thread;
-    spin_unlock(&sched_lock);
+    spin_lock(&target_cpu->sched_lock);
+    thread->next = target_cpu->ready_queues[priority];
+    target_cpu->ready_queues[priority] = thread;
+    spin_unlock(&target_cpu->sched_lock);
+    
     b_irq_restore(flags);
-
     return thread->tid;
 }
 
-static void sched_age_threads() {
+static void sched_age_threads(cpu_t *cpu) {
     for (int p = 0; p < MAX_PRIORITY; p++) {
         thread_t *prev = NULL;
-        thread_t *curr = ready_queues[p];
+        thread_t *curr = cpu->ready_queues[p];
         while (curr) {
-            if (curr->tid == 1) {
-                prev = curr;
-                curr = curr->next;
-                continue;
-            }
+            if (curr->tid == 1) { prev = curr; curr = curr->next; continue; }
             curr->total_ticks++; 
             if (curr->total_ticks > 19) { 
                 curr->total_ticks = 0;
                 thread_t *aged = curr;
                 if (prev) prev->next = curr->next;
-                else ready_queues[p] = curr->next;
+                else cpu->ready_queues[p] = curr->next;
                 curr = curr->next;
-                if (aged->priority < MAX_PRIORITY) {
-                    aged->priority++;
-                }
-                aged->next = ready_queues[aged->priority];
-                ready_queues[aged->priority] = aged;
+                if (aged->priority < MAX_PRIORITY) aged->priority++;
+                aged->next = cpu->ready_queues[aged->priority];
+                cpu->ready_queues[aged->priority] = aged;
                 continue;
             }
             prev = curr;
@@ -166,91 +172,88 @@ static void sched_age_threads() {
 }
 
 uint64_t sched_reschedule(uint64_t current_rsp) {
-    if (!current_thread) return current_rsp;
+    cpu_t *cpu = cpu_get();
+    if (!cpu->sched_thread) return current_rsp;
 
     uint64_t flags = b_irq_save();
-    spin_lock(&sched_lock);
-    current_thread->rsp = current_rsp;
-    total_sched_ticks++;
+    spin_lock(&cpu->sched_lock);
+    
+    thread_t *current = cpu->sched_thread;
+    current->rsp = current_rsp;
     
     uint64_t current_tick = apic_get_ticks();
     thread_t *prev_sleep = NULL;
-    thread_t *curr_sleep = sleep_queue;
+    thread_t *curr_sleep = cpu_extras[cpu->cpu_id].sleep_queue;
     while (curr_sleep) {
         if (current_tick >= curr_sleep->wakeup_tick) {
             thread_t *awake = curr_sleep;
             if (prev_sleep) prev_sleep->next = curr_sleep->next;
-            else sleep_queue = curr_sleep->next;
+            else cpu_extras[cpu->cpu_id].sleep_queue = curr_sleep->next;
             curr_sleep = curr_sleep->next;
-            
             awake->state = THREAD_READY;
-            awake->next = ready_queues[awake->priority];
-            ready_queues[awake->priority] = awake;
+            awake->next = cpu->ready_queues[awake->priority];
+            cpu->ready_queues[awake->priority] = awake;
         } else {
             prev_sleep = curr_sleep;
             curr_sleep = curr_sleep->next;
         }
     }
 
-    if (current_thread->ticks_remaining > 0) {
-        current_thread->ticks_remaining--;
-    }
-
-    sched_age_threads();
+    if (current->ticks_remaining > 0) current->ticks_remaining--;
+    sched_age_threads(cpu);
 
     for (int p = MAX_PRIORITY; p >= 0; p--) {
-        if (ready_queues[p] != NULL) {
-            if (p > current_thread->priority || 
-               (p == current_thread->priority && current_thread->ticks_remaining == 0) || 
-                current_thread->state != THREAD_RUNNING) {
+        if (cpu->ready_queues[p] != NULL) {
+            if (p > current->priority || 
+               (p == current->priority && current->ticks_remaining == 0) || 
+                current->state != THREAD_RUNNING) {
                 
-                thread_t *next = ready_queues[p];
-                ready_queues[p] = next->next;
+                thread_t *next = cpu->ready_queues[p];
+                cpu->ready_queues[p] = next->next;
                 
-                if (current_thread->state == THREAD_RUNNING) {
-                    current_thread->state = THREAD_READY;
-                    current_thread->ticks_remaining = (MAX_PRIORITY - current_thread->priority + 1) * 2;
-                    current_thread->next = NULL;
-                    
-                    if (ready_queues[current_thread->priority] == NULL) {
-                        ready_queues[current_thread->priority] = current_thread;
+                if (current->state == THREAD_RUNNING) {
+                    current->state = THREAD_READY;
+                    current->ticks_remaining = (MAX_PRIORITY - current->priority + 1) * 2;
+                    current->next = NULL;
+                    if (cpu->ready_queues[current->priority] == NULL) {
+                        cpu->ready_queues[current->priority] = current;
                     } else {
-                        thread_t *last = ready_queues[current_thread->priority];
+                        thread_t *last = cpu->ready_queues[current->priority];
                         while (last->next) last = last->next;
-                        last->next = current_thread;
+                        last->next = current;
                     }
-                } else if (current_thread->state == THREAD_SLEEPING) {
-                    current_thread->next = sleep_queue;
-                    sleep_queue = current_thread;
-                } else if (current_thread->state == THREAD_DEAD && current_thread->priority != 0) {
-                    if (current_thread->user_stack_limit) kfree(current_thread->user_stack_limit);
-                    kfree(current_thread->stack_limit);
-                    kfree(current_thread);
+                } else if (current->state == THREAD_SLEEPING) {
+                    current->next = cpu_extras[cpu->cpu_id].sleep_queue;
+                    cpu_extras[cpu->cpu_id].sleep_queue = current;
+                } else if (current->state == THREAD_DEAD && current->priority != 0) {
+                    if (current->user_stack_limit) kfree(current->user_stack_limit);
+                    kfree(current->stack_limit);
+                    kfree(current);
                 }
 
                 next->state = THREAD_RUNNING;
-                set_current_thread(next);
-                
-                tss_set_stack((uint64_t)current_thread->stack_top);
-                cpu_get()->kernel_stack = (uint64_t)current_thread->stack_top;
+                cpu->sched_thread = next;
+                tss_set_stack((uint64_t)next->stack_top);
+                cpu->kernel_stack = (uint64_t)next->stack_top;
 
-                spin_unlock(&sched_lock);
+                spin_unlock(&cpu->sched_lock);
                 b_irq_restore(flags);
-                return current_thread->rsp;
+                return next->rsp;
             }
             break;
         }
     }
 
-    spin_unlock(&sched_lock);
+    spin_unlock(&cpu->sched_lock);
     b_irq_restore(flags);
-    return current_thread->rsp;
+    return current->rsp;
 }
 
 void sched_exit() {
     __asm__ volatile ("cli");
-    if (current_thread) {
-        current_thread->state = THREAD_DEAD;
+    cpu_t *cpu = cpu_get();
+    if (cpu->sched_thread) {
+        cpu->sched_thread->state = THREAD_DEAD;
     }
     __asm__ volatile ("sti");
     while(1) __asm__ volatile ("hlt"); 
@@ -262,71 +265,109 @@ void sched_yield() {
 
 void sched_sleep(uint64_t ms) {
     __asm__ volatile ("cli");
-    if (current_thread) {
-        current_thread->state = THREAD_SLEEPING;
-        current_thread->wakeup_tick = apic_get_ticks() + (ms / 10);
+    cpu_t *cpu = cpu_get();
+    if (cpu->sched_thread) {
+        cpu->sched_thread->state = THREAD_SLEEPING;
+        cpu->sched_thread->wakeup_tick = apic_get_ticks() + (ms / 10);
     }
     __asm__ volatile ("sti");
-    while (sched_is_alive(current_thread->tid) && current_thread->state == THREAD_SLEEPING) { sched_yield(); }
+    sched_yield();
 }
 
 uint64_t sched_get_tid() {
-    return current_thread ? current_thread->tid : 0;
+    cpu_t *cpu = cpu_get();
+    return cpu->sched_thread ? cpu->sched_thread->tid : 0;
 }
 
 int sched_is_alive(uint64_t tid) {
-    if (current_thread && current_thread->tid == tid) return 1;
-    for (int p = 0; p <= MAX_PRIORITY; p++) {
-        thread_t *curr = ready_queues[p];
-        while (curr) {
-            if (curr->tid == tid) return 1;
-            curr = curr->next;
+    for (int i = 0; i < cpu_get_count(); i++) {
+        cpu_t *cpu = cpu_get_by_index(i);
+        uint64_t flags = b_irq_save();
+        spin_lock(&cpu->sched_lock);
+        
+        if (cpu->sched_thread && cpu->sched_thread->tid == tid) {
+            spin_unlock(&cpu->sched_lock);
+            b_irq_restore(flags);
+            return 1;
         }
-    }
-    thread_t *curr_sleep = sleep_queue;
-    while (curr_sleep) {
-        if (curr_sleep->tid == tid) return 1;
-        curr_sleep = curr_sleep->next;
+
+        for (int p = 0; p <= MAX_PRIORITY; p++) {
+            thread_t *curr = cpu->ready_queues[p];
+            while (curr) {
+                if (curr->tid == tid) {
+                    spin_unlock(&cpu->sched_lock);
+                    b_irq_restore(flags);
+                    return 1;
+                }
+                curr = curr->next;
+            }
+        }
+        
+        thread_t *curr_sleep = cpu_extras[cpu->cpu_id].sleep_queue;
+        while (curr_sleep) {
+            if (curr_sleep->tid == tid) {
+                spin_unlock(&cpu->sched_lock);
+                b_irq_restore(flags);
+                return 1;
+            }
+            curr_sleep = curr_sleep->next;
+        }
+        
+        spin_unlock(&cpu->sched_lock);
+        b_irq_restore(flags);
     }
     return 0;
 }
 
 void sched_print_tasks() {
-    console_print("tid      pri  state     name\n");
-    console_print("----------------------------\n");
+    console_print("tid      pri  core state     name\n");
+    console_print("----------------------------------\n");
     
-    if (current_thread) {
-        console_print_hex(current_thread->tid);
-        console_print("  ");
-        console_print_hex(current_thread->priority);
-        console_print("  running   ");
-        console_print(current_thread->name);
-        console_print("\n");
-    }
+    for (int i = 0; i < cpu_get_count(); i++) {
+        cpu_t *cpu = cpu_get_by_index(i);
+        uint64_t flags = b_irq_save();
+        spin_lock(&cpu->sched_lock);
 
-    for (int p = 0; p <= MAX_PRIORITY; p++) {
-        thread_t *curr = ready_queues[p];
-        while (curr) {
-            if (curr != current_thread) {
+        if (cpu->sched_thread) {
+            console_print_hex(cpu->sched_thread->tid);
+            console_print("  ");
+            console_print_hex(cpu->sched_thread->priority);
+            console_print("  ");
+            console_print_hex(cpu->cpu_id);
+            console_print("  running   ");
+            console_print(cpu->sched_thread->name);
+            console_print("\n");
+        }
+
+        for (int p = 0; p <= MAX_PRIORITY; p++) {
+            thread_t *curr = cpu->ready_queues[p];
+            while (curr) {
                 console_print_hex(curr->tid);
                 console_print("  ");
                 console_print_hex(curr->priority);
+                console_print("  ");
+                console_print_hex(cpu->cpu_id);
                 console_print("  ready     ");
                 console_print(curr->name);
                 console_print("\n");
+                curr = curr->next;
             }
-            curr = curr->next;
         }
-    }
 
-    thread_t *curr_sleep = sleep_queue;
-    while (curr_sleep) {
-        console_print_hex(curr_sleep->tid);
-        console_print("  ");
-        console_print_hex(curr_sleep->priority);
-        console_print("  sleeping  ");
-        console_print(curr_sleep->name);
-        console_print("\n");
-        curr_sleep = curr_sleep->next;
+        thread_t *curr_sleep = cpu_extras[cpu->cpu_id].sleep_queue;
+        while (curr_sleep) {
+            console_print_hex(curr_sleep->tid);
+            console_print("  ");
+            console_print_hex(curr_sleep->priority);
+            console_print("  ");
+            console_print_hex(cpu->cpu_id);
+            console_print("  sleeping  ");
+            console_print(curr_sleep->name);
+            console_print("\n");
+            curr_sleep = curr_sleep->next;
+        }
+        
+        spin_unlock(&cpu->sched_lock);
+        b_irq_restore(flags);
     }
 }
