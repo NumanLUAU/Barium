@@ -18,7 +18,7 @@ cd ~
 now install the basic tools:
 ```bash
 sudo apt update
-sudo apt install -y build-essential bison flex libgmp3-dev libmpfr-dev libmpc-dev texinfo make nasm gcc-mingw-w64-x86-64 mtools dosfstools qemu-system-x86 curl ovmf
+sudo apt install -y build-essential bison flex libgmp3-dev libmpfr-dev libmpc-dev texinfo make nasm gcc-mingw-w64-x86-64 mtools dosfstools qemu-system-x86 curl
 ```
 
 ## 3. clone the code

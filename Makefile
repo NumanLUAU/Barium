@@ -86,4 +86,4 @@ clean:
 	rm -rf build bin $(IMG)
 
 run-img: $(IMG)
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=$(IMG),if=ide,format=raw -net none -smp 4
+	qemu-system-x86_64 -bios toolchain/OVMF.fd -drive file=$(IMG),if=ide,format=raw -net none -smp 4
