@@ -1,5 +1,27 @@
 #include <barium/lib.h>
 
+void spin_lock(spinlock_t *lock) {
+    while (__sync_lock_test_and_set(&lock->lock, 1)) {
+        while (lock->lock) {
+            __asm__ volatile ("pause");
+        }
+    }
+}
+
+void spin_unlock(spinlock_t *lock) {
+    __sync_lock_release(&lock->lock);
+}
+
+uint64_t b_irq_save() {
+    uint64_t flags;
+    __asm__ volatile ("pushfq; pop %0; cli" : "=r"(flags) : : "memory");
+    return flags;
+}
+
+void b_irq_restore(uint64_t flags) {
+    __asm__ volatile ("push %0; popfq" : : "r"(flags) : "memory");
+}
+
 void b_outb(uint16_t port, uint8_t val) {
     __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
 }
@@ -43,6 +65,20 @@ void b_memcpy(void *dest, const void *src, size_t n) {
     uint8_t *d = (uint8_t*)dest;
     const uint8_t *s = (const uint8_t*)src;
     for (size_t i = 0; i < n; i++) d[i] = s[i];
+}
+
+void b_strcpy(char *dest, const char *src) {
+    while (*src) *dest++ = *src++;
+    *dest = '\0';
+}
+
+int b_memcmp(const void *s1, const void *s2, size_t n) {
+    const uint8_t *p1 = (const uint8_t*)s1;
+    const uint8_t *p2 = (const uint8_t*)s2;
+    for (size_t i = 0; i < n; i++) {
+        if (p1[i] != p2[i]) return p1[i] - p2[i];
+    }
+    return 0;
 }
 
 void b_sleep(uint32_t ms) {

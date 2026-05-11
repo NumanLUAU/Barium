@@ -25,6 +25,7 @@ typedef struct {
 } __attribute__((packed)) interrupt_frame_t;
 
 void idt_init();
+void idt_init_ap();
 void idt_set_gate(uint8_t vector, void *isr, uint8_t attributes);
 
 #endif

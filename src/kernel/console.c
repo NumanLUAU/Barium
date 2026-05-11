@@ -7,6 +7,7 @@ static uint32_t height;
 static uint32_t stride;
 static uint32_t cursor_x = 10;
 static uint32_t cursor_y = 10;
+static spinlock_t console_lock;
 
 #define FONT_SCALE 1
 #define CHAR_WIDTH (8 * FONT_SCALE)
@@ -34,6 +35,7 @@ void console_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color
 }
 
 void console_clear(uint32_t color) {
+    spin_lock(&console_lock);
     for (uint32_t y = 0; y < height; y++) {
         for (uint32_t x = 0; x < width; x++) {
             console_put_pixel(x, y, color);
@@ -41,11 +43,14 @@ void console_clear(uint32_t color) {
     }
     cursor_x = 10;
     cursor_y = 10;
+    spin_unlock(&console_lock);
 }
 
 extern uint8_t font8x8_basic[128][8];
 
 void console_putchar(char c, uint32_t color) {
+    uint64_t flags = b_irq_save();
+    spin_lock(&console_lock);
     if (c == '\n') {
         cursor_x = 10;
         cursor_y += CHAR_HEIGHT + 4;
@@ -77,8 +82,11 @@ void console_putchar(char c, uint32_t color) {
     }
 
     if (cursor_y + CHAR_HEIGHT >= height) {
-        console_clear(0x1B1B1B);
+        cursor_x = 10;
+        cursor_y = 10;
     }
+    spin_unlock(&console_lock);
+    b_irq_restore(flags);
 }
 
 void console_putc(char c) { console_putchar(c, 0xFFFFFF); }

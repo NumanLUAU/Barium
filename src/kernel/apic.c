@@ -11,9 +11,11 @@
 #define APIC_REG_TIMER_INIT 0x380
 #define APIC_REG_TIMER_CURRENT 0x390
 #define APIC_REG_TIMER_DIVIDE 0x3E0
+#define APIC_REG_ICR_LOW 0x300
+#define APIC_REG_ICR_HIGH 0x310
 
 static uint32_t *apic;
-static uint32_t ticks_per_ms;
+static volatile uint32_t ticks_per_ms;
 static uint64_t global_ticks = 0;
 
 static void apic_write(uint32_t reg, uint32_t val) {
@@ -53,9 +55,33 @@ void apic_init(barium_boot_info_t *info) {
     uint32_t current = apic_read(APIC_REG_TIMER_CURRENT);
     ticks_per_ms = (0xFFFFFFFF - current) / 10;
 
+    apic_write(APIC_REG_TIMER_INIT, 0);
+}
+
+void apic_init_ap() {
+    apic_write(APIC_REG_SPURIOUS, apic_read(APIC_REG_SPURIOUS) | 0x1FF);
     apic_write(APIC_REG_LVT_TIMER, 0x20 | 0x20000); 
     apic_write(APIC_REG_TIMER_DIVIDE, 0x03);
     apic_write(APIC_REG_TIMER_INIT, ticks_per_ms * 10);
+}
+
+void apic_eoi() {
+    apic_write(APIC_REG_EOI, 0);
+}
+
+void apic_send_ipi(uint32_t lapic_id, uint32_t val) {
+    apic_write(APIC_REG_ICR_HIGH, lapic_id << 24);
+    apic_write(APIC_REG_ICR_LOW, val);
+}
+
+uint32_t apic_get_id() {
+    return apic_read(APIC_REG_ID) >> 24;
+}
+
+void apic_delay_ms(uint32_t ms) {
+    uint32_t target = ticks_per_ms * ms;
+    apic_write(APIC_REG_TIMER_INIT, target);
+    while (apic_read(APIC_REG_TIMER_CURRENT) > 0);
 }
 
 void apic_timer_handler() {

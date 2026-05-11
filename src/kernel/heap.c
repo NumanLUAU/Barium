@@ -11,6 +11,7 @@ typedef struct heap_block {
 
 #define HEAP_MAGIC 0xBA410101
 static heap_block_t *heap_start = NULL;
+static spinlock_t heap_lock;
 
 void heap_init() {
     uint8_t *pool = (uint8_t*)pmm_alloc(1024);
@@ -23,13 +24,14 @@ void heap_init() {
 
 void *kmalloc(size_t size) {
     if (size == 0) return NULL;
-    __asm__ volatile ("cli");
+    uint64_t flags = b_irq_save();
+    spin_lock(&heap_lock);
     size = (size + 7) & ~7;
     
     heap_block_t *current = heap_start;
     while (current) {
         if (current->free && current->size >= size) {
-            if (current->size > size + sizeof(heap_block_t) + 8) {
+            if (current->size > size + sizeof(heap_block_t) + 16) {
                 heap_block_t *new_block = (heap_block_t*)((uint8_t*)current + sizeof(heap_block_t) + size);
                 new_block->size = current->size - size - sizeof(heap_block_t);
                 new_block->next = current->next;
@@ -41,20 +43,27 @@ void *kmalloc(size_t size) {
             }
             current->free = 0;
             void *ret = (void*)((uint8_t*)current + sizeof(heap_block_t));
-            __asm__ volatile ("sti");
+            spin_unlock(&heap_lock);
+            b_irq_restore(flags);
             return ret;
         }
         current = current->next;
     }
-    __asm__ volatile ("sti");
+    spin_unlock(&heap_lock);
+    b_irq_restore(flags);
     return NULL;
 }
 
 void kfree(void *ptr) {
     if (!ptr) return;
-    __asm__ volatile ("cli");
+    uint64_t flags = b_irq_save();
+    spin_lock(&heap_lock);
     heap_block_t *block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));
-    if (block->magic != HEAP_MAGIC) return;
+    if (block->magic != HEAP_MAGIC) {
+        spin_unlock(&heap_lock);
+        b_irq_restore(flags);
+        return;
+    }
     
     block->free = 1;
     
@@ -67,5 +76,6 @@ void kfree(void *ptr) {
         }
         current = current->next;
     }
-    __asm__ volatile ("sti");
+    spin_unlock(&heap_lock);
+    b_irq_restore(flags);
 }

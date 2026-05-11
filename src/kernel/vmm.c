@@ -10,7 +10,7 @@ void vmm_switch(pml4_t *pml4) {
 }
 
 void vmm_init(barium_boot_info_t *info) {
-    kernel_pml4 = (pml4_t*)pmm_alloc();
+    kernel_pml4 = (pml4_t*)pmm_alloc(1);
     b_memset(kernel_pml4, 0, 4096);
 
     b_efi_mem_desc *mmap = (b_efi_mem_desc*)info->memory_map;
@@ -50,21 +50,21 @@ void vmm_map(pml4_t *pml4, uint64_t virt, uint64_t phys, uint64_t flags) {
     uint64_t pt_idx   = (virt >> 12) & 0x1FF;
 
     if (!(pml4[pml4_idx] & PAGE_PRESENT)) {
-        void *pdpt = pmm_alloc();
+        void *pdpt = pmm_alloc(1);
         b_memset(pdpt, 0, 4096);
         pml4[pml4_idx] = (uint64_t)pdpt | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
     }
     uint64_t *pdpt = (uint64_t*)(pml4[pml4_idx] & ~0xFFF);
 
     if (!(pdpt[pdpt_idx] & PAGE_PRESENT)) {
-        void *pd = pmm_alloc();
+        void *pd = pmm_alloc(1);
         b_memset(pd, 0, 4096);
         pdpt[pdpt_idx] = (uint64_t)pd | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
     }
     uint64_t *pd = (uint64_t*)(pdpt[pdpt_idx] & ~0xFFF);
 
     if (!(pd[pd_idx] & PAGE_PRESENT)) {
-        void *pt = pmm_alloc();
+        void *pt = pmm_alloc(1);
         b_memset(pt, 0, 4096);
         pd[pd_idx] = (uint64_t)pt | PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER;
     }

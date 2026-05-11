@@ -46,6 +46,10 @@ void gdt_init() {
     tss_load();
 }
 
+void gdt_init_ap() {
+    gdt_load(&gdtr);
+}
+
 void *gdt_get_base() {
     return (void*)gdt;
 }

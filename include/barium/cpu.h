@@ -6,6 +6,7 @@
 typedef struct {
     uint64_t kernel_stack;
     uint64_t user_rsp;
+    void *sched_thread;
 } __attribute__((packed)) cpu_t;
 
 void cpu_init();

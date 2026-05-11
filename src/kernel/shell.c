@@ -9,6 +9,7 @@
 #include <barium/apic.h>
 #include <barium/sched.h>
 #include <barium/syscall.h>
+#include <barium/acpi.h>
 
 extern uint64_t get_cs();
 extern uint64_t get_ds();
@@ -143,21 +144,21 @@ void pmmtest() {
     console_newline();
 
     console_print("stage 1: alloc\n");
-    void *p1 = pmm_alloc();
+    void *p1 = pmm_alloc(1);
     if (!p1) { console_print("alloc failed\n"); return; }
-    pmm_free(p1);
+    pmm_free(p1, 1);
     console_print("ok\n");
 
     console_print("stage 2: stress\n");
     void *pages[256];
     for (int i = 0; i < 256; i++) {
-        pages[i] = pmm_alloc();
+        pages[i] = pmm_alloc(1);
         *(uint64_t*)pages[i] = 0xDEADC0DE ^ (uint64_t)pages[i];
     }
     int ok = 1;
     for (int i = 0; i < 256; i++) if (*(uint64_t*)pages[i] != (0xDEADC0DE ^ (uint64_t)pages[i])) ok = 0;
     if (ok) console_print("pass\n");
-    for (int i = 0; i < 256; i++) pmm_free(pages[i]);
+    for (int i = 0; i < 256; i++) pmm_free(pages[i], 1);
 
     console_print("pmm works\n");
 }
@@ -182,7 +183,7 @@ void vmmtest() {
     pml4_t *pml4 = vmm_get_kernel_pml4();
     console_print("pml4=");
     console_print_hex((uint64_t)pml4);
-    void *phys_page = pmm_alloc();
+    void *phys_page = pmm_alloc(1);
     
     console_print("stage 1: alias\n");
     vmm_map(pml4, 0xDEADBEEF000, (uint64_t)phys_page, PAGE_PRESENT | PAGE_WRITABLE);
@@ -527,6 +528,39 @@ void schedtest() {
     console_print("\nsched ok\n");
 }
 
+static void core_worker() {
+    uint32_t id = apic_get_id();
+    console_print("worker starting on core ");
+    console_print_hex(id);
+    console_newline();
+
+    for (int i = 0; i < 5; i++) {
+        b_sleep(500);
+        id = apic_get_id();
+        console_print("core ");
+        console_print_hex(id);
+        console_print(" tick\n");
+    }
+    
+    console_print("worker done\n");
+    sched_exit();
+}
+
+void coretest() {
+    uint32_t count = acpi_get_cpu_count();
+    uint32_t workers = count * 2;
+
+    console_print("detected ");
+    console_print_hex(count);
+    console_print(" cores. spawning ");
+    console_print_hex(workers);
+    console_print(" workers\n");
+
+    for (uint32_t i = 0; i < workers; i++) {
+        sched_spawn(core_worker, 10, "worker");
+    }
+}
+
 void shell_run() {
     char cmd[64];
     int pos = 0;
@@ -555,7 +589,8 @@ void shell_run() {
         else if (b_strcmp(cmd, "heaptest") == 0) heaptest();
         else if (b_strcmp(cmd, "timertest") == 0) timertest();
         else if (b_strcmp(cmd, "schedtest") == 0) schedtest();
-        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, tasks, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
+        else if (b_strcmp(cmd, "coretest") == 0) coretest();
+        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, tasks, coretest, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
         else if (pos > 0) console_print("unknown command\n");
     }
 }

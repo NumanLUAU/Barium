@@ -24,10 +24,13 @@ KERN_SRCS = src/kernel/kernel.c \
             src/kernel/pmm.c \
             src/kernel/sched.c \
             src/kernel/cpu.c \
-            src/kernel/syscall.c
+            src/kernel/syscall.c \
+            src/kernel/acpi.c \
+            src/kernel/smp.c
 KERN_OBJS = build/entry.o \
             build/interrupt.o \
             build/syscall_entry.o \
+            build/smp_boot.o \
             $(KERN_SRCS:src/kernel/%.c=build/%.o)
 KERN_BIN = bin/kernel.bin
 
@@ -53,6 +56,11 @@ build/syscall_entry.o: src/kernel/syscall_entry.asm
 	@mkdir -p build
 	$(NASM) -f elf64 $< -o $@
 
+build/smp_boot.o: src/kernel/smp_boot.asm
+	@mkdir -p build
+	$(NASM) -f bin $< -o build/smp_boot.bin
+	$(LD_KERN) -r -b binary -o $@ build/smp_boot.bin
+
 build/%.o: src/kernel/%.c
 	@mkdir -p build
 	$(CC_KERN) $(CFLAGS_KERN) -c -o $@ $<
@@ -76,4 +84,4 @@ clean:
 	rm -rf build bin $(IMG)
 
 run-img: $(IMG)
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=$(IMG),if=ide,format=raw -net none
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -drive file=$(IMG),if=ide,format=raw -net none -smp 4

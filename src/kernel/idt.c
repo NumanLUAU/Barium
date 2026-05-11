@@ -68,6 +68,10 @@ void idt_init() {
     idt_load(&idtr);
 }
 
+void idt_init_ap() {
+    idt_load(&idtr);
+}
+
 uint64_t interrupt_handler(uint64_t rsp) {
     context_t *ctx = (context_t*)rsp;
     uint8_t int_no = (uint8_t)ctx->int_no;

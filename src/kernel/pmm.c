@@ -7,6 +7,7 @@ static uint64_t total_pages;
 static uint64_t free_pages;
 static uint64_t last_search_index = 0;
 static uint64_t highest_phys_address = 0;
+static spinlock_t pmm_lock;
 
 static void bitmap_set(uint64_t page) {
     bitmap[page / 8] |= (1 << (page % 8));
@@ -80,32 +81,44 @@ void pmm_init(barium_boot_info_t *info) {
     }
 }
 
-void *pmm_alloc() {
-    for (uint64_t i = last_search_index; i < total_pages; i++) {
-        if (!bitmap_test(i)) {
-            bitmap_set(i);
-            free_pages--;
-            last_search_index = i;
+void *pmm_alloc(uint64_t count) {
+    uint64_t flags = b_irq_save();
+    spin_lock(&pmm_lock);
+    for (uint64_t i = 0; i < total_pages - count; i++) {
+        int found = 1;
+        for (uint64_t j = 0; j < count; j++) {
+            if (bitmap_test(i + j)) {
+                found = 0;
+                i += j; 
+                break;
+            }
+        }
+
+        if (found) {
+            for (uint64_t j = 0; j < count; j++) {
+                bitmap_set(i + j);
+            }
+            free_pages -= count;
+            spin_unlock(&pmm_lock);
+            b_irq_restore(flags);
             return (void*)(i * 4096);
         }
     }
-    for (uint64_t i = 0; i < last_search_index; i++) {
-        if (!bitmap_test(i)) {
-            bitmap_set(i);
-            free_pages--;
-            last_search_index = i;
-            return (void*)(i * 4096);
-        }
-    }
+    spin_unlock(&pmm_lock);
+    b_irq_restore(flags);
     return (void*)0;
 }
 
-void pmm_free(void *ptr) {
+void pmm_free(void *ptr, uint64_t count) {
+    uint64_t flags = b_irq_save();
+    spin_lock(&pmm_lock);
     uint64_t page = (uint64_t)ptr / 4096;
-    if (bitmap_test(page)) {
-        bitmap_clear(page);
+    for (uint64_t i = 0; i < count; i++) {
+        bitmap_clear(page + i);
         free_pages++;
     }
+    spin_unlock(&pmm_lock);
+    b_irq_restore(flags);
 }
 
 uint64_t pmm_get_free_memory() { return free_pages * 4096; }

@@ -10,35 +10,38 @@ extern uint64_t apic_get_ticks();
 
 static thread_t *ready_queues[MAX_PRIORITY + 1];
 static thread_t *sleep_queue = NULL;
-static thread_t *current_thread = NULL;
 static uint64_t next_tid = 1;
 static uint64_t total_sched_ticks = 0;
+static spinlock_t sched_lock;
+
+#define current_thread ((thread_t*)cpu_get()->sched_thread)
+#define set_current_thread(t) (cpu_get()->sched_thread = (void*)(t))
 
 void sched_init() {
-    b_memset(ready_queues, 0, sizeof(ready_queues));
-    sleep_queue = NULL;
-    current_thread = NULL;
-    next_tid = 1;
-    total_sched_ticks = 0;
-    
     thread_t *idle = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(idle, 0, sizeof(thread_t));
     void *stack = kmalloc(8192);
+    
+    uint64_t flags = b_irq_save();
+    spin_lock(&sched_lock);
+    if (next_tid == 1) {
+        b_memset(ready_queues, 0, sizeof(ready_queues));
+        sleep_queue = NULL;
+        total_sched_ticks = 0;
+    }
+    
     idle->tid = next_tid++;
     idle->state = THREAD_RUNNING;
     idle->priority = 0;
     
-    char *idle_name = "idle";
-    int i;
-    for (i = 0; i < 15 && idle_name[i]; i++) idle->name[i] = idle_name[i];
-    idle->name[i] = '\0';
-
+    b_strcpy(idle->name, "idle");
     idle->stack_limit = stack;
     idle->stack_top = (void*)((uint64_t)stack + 8192);
     idle->next = NULL;
-    current_thread = idle;
-
-    sched_spawn(shell_run, 10, "shell");
+    set_current_thread(idle);
+    
+    spin_unlock(&sched_lock);
+    b_irq_restore(flags);
 }
 
 uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
@@ -48,9 +51,7 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
     b_memset(thread, 0, sizeof(thread_t));
     
     if (name) {
-        int i;
-        for (i = 0; i < 15 && name[i]; i++) thread->name[i] = name[i];
-        thread->name[i] = '\0';
+        b_strcpy(thread->name, name);
     }
 
     void *stack = kmalloc(8192);
@@ -67,7 +68,8 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
     
     for (int i = 0; i < 15; i++) *(--ptr) = 0;
 
-    __asm__ volatile ("cli");
+    uint64_t flags = b_irq_save();
+    spin_lock(&sched_lock);
     thread->tid = next_tid++;
     thread->rsp = (uint64_t)ptr;
     thread->state = THREAD_READY;
@@ -79,7 +81,8 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
 
     thread->next = ready_queues[priority];
     ready_queues[priority] = thread;
-    __asm__ volatile ("sti");
+    spin_unlock(&sched_lock);
+    b_irq_restore(flags);
 
     return thread->tid;
 }
@@ -111,7 +114,8 @@ uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
     
     for (int i = 0; i < 15; i++) *(--ptr) = 0;
 
-    __asm__ volatile ("cli");
+    uint64_t flags = b_irq_save();
+    spin_lock(&sched_lock);
     thread->tid = next_tid++;
     thread->rsp = (uint64_t)ptr;
     thread->state = THREAD_READY;
@@ -125,7 +129,8 @@ uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
 
     thread->next = ready_queues[priority];
     ready_queues[priority] = thread;
-    __asm__ volatile ("sti");
+    spin_unlock(&sched_lock);
+    b_irq_restore(flags);
 
     return thread->tid;
 }
@@ -163,6 +168,8 @@ static void sched_age_threads() {
 uint64_t sched_reschedule(uint64_t current_rsp) {
     if (!current_thread) return current_rsp;
 
+    uint64_t flags = b_irq_save();
+    spin_lock(&sched_lock);
     current_thread->rsp = current_rsp;
     total_sched_ticks++;
     
@@ -222,17 +229,21 @@ uint64_t sched_reschedule(uint64_t current_rsp) {
                 }
 
                 next->state = THREAD_RUNNING;
-                current_thread = next;
+                set_current_thread(next);
                 
                 tss_set_stack((uint64_t)current_thread->stack_top);
                 cpu_get()->kernel_stack = (uint64_t)current_thread->stack_top;
 
+                spin_unlock(&sched_lock);
+                b_irq_restore(flags);
                 return current_thread->rsp;
             }
             break;
         }
     }
 
+    spin_unlock(&sched_lock);
+    b_irq_restore(flags);
     return current_thread->rsp;
 }
 

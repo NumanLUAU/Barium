@@ -42,6 +42,7 @@ typedef struct {
 } __attribute__((packed)) gdtr_t;
 
 void gdt_init();
+void gdt_init_ap();
 void *gdt_get_base();
 void *tss_get_ptr();
 void tss_set_stack(uint64_t stack);

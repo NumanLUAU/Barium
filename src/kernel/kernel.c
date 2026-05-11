@@ -10,7 +10,8 @@
 #include <barium/keyboard.h>
 #include <barium/shell.h>
 #include <barium/pmm.h>
-#include <barium/sched.h>
+#include <barium/acpi.h>
+#include <barium/smp.h>
 
 void kmain(barium_boot_info_t *info) {
     console_init(info);
@@ -21,16 +22,20 @@ void kmain(barium_boot_info_t *info) {
     pmm_init(info);
     idt_init();
     vmm_init(info);
+    acpi_init(info->rsdp);
     heap_init();
     apic_init(info);
     cpu_init();
     syscall_init();
+    smp_init();
+    apic_init_ap();
     sched_init();
     keyboard_init();
 
-    console_print("barium ready\n");
+    sched_spawn(shell_run, 10, "shell");
 
     __asm__ volatile("sti");
+    console_print("barium ready\n");
 
     while (1) __asm__ volatile("hlt");
 }
