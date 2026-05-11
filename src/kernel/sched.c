@@ -22,23 +22,37 @@ void sched_init() {
     total_sched_ticks = 0;
     
     thread_t *idle = (thread_t*)kmalloc(sizeof(thread_t));
+    b_memset(idle, 0, sizeof(thread_t));
     void *stack = kmalloc(8192);
     idle->tid = next_tid++;
     idle->state = THREAD_RUNNING;
     idle->priority = 0;
+    
+    char *idle_name = "idle";
+    int i;
+    for (i = 0; i < 15 && idle_name[i]; i++) idle->name[i] = idle_name[i];
+    idle->name[i] = '\0';
+
     idle->stack_limit = stack;
     idle->stack_top = (void*)((uint64_t)stack + 8192);
     idle->next = NULL;
     current_thread = idle;
 
-    sched_spawn(shell_run, 10);
+    sched_spawn(shell_run, 10, "shell");
 }
 
-uint64_t sched_spawn(void (*entry)(), uint8_t priority) {
+uint64_t sched_spawn(void (*entry)(), uint8_t priority, char *name) {
     if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
 
     thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(thread, 0, sizeof(thread_t));
+    
+    if (name) {
+        int i;
+        for (i = 0; i < 15 && name[i]; i++) thread->name[i] = name[i];
+        thread->name[i] = '\0';
+    }
+
     void *stack = kmalloc(8192);
     uint64_t *ptr = (uint64_t*)((uint64_t)stack + 8192);
     
@@ -70,11 +84,18 @@ uint64_t sched_spawn(void (*entry)(), uint8_t priority) {
     return thread->tid;
 }
 
-uint64_t sched_spawn_user(void (*entry)(), uint8_t priority) {
+uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
     if (priority > MAX_PRIORITY) priority = MAX_PRIORITY;
 
     thread_t *thread = (thread_t*)kmalloc(sizeof(thread_t));
     b_memset(thread, 0, sizeof(thread_t));
+    
+    if (name) {
+        int i;
+        for (i = 0; i < 15 && name[i]; i++) thread->name[i] = name[i];
+        thread->name[i] = '\0';
+    }
+
     void *kstack = kmalloc(8192);
     void *ustack = kmalloc(8192);
     uint64_t *ptr = (uint64_t*)((uint64_t)kstack + 8192);
@@ -257,4 +278,44 @@ int sched_is_alive(uint64_t tid) {
         curr_sleep = curr_sleep->next;
     }
     return 0;
+}
+
+void sched_print_tasks() {
+    console_print("tid      pri  state     name\n");
+    console_print("----------------------------\n");
+    
+    if (current_thread) {
+        console_print_hex(current_thread->tid);
+        console_print("  ");
+        console_print_hex(current_thread->priority);
+        console_print("  running   ");
+        console_print(current_thread->name);
+        console_print("\n");
+    }
+
+    for (int p = 0; p <= MAX_PRIORITY; p++) {
+        thread_t *curr = ready_queues[p];
+        while (curr) {
+            if (curr != current_thread) {
+                console_print_hex(curr->tid);
+                console_print("  ");
+                console_print_hex(curr->priority);
+                console_print("  ready     ");
+                console_print(curr->name);
+                console_print("\n");
+            }
+            curr = curr->next;
+        }
+    }
+
+    thread_t *curr_sleep = sleep_queue;
+    while (curr_sleep) {
+        console_print_hex(curr_sleep->tid);
+        console_print("  ");
+        console_print_hex(curr_sleep->priority);
+        console_print("  sleeping  ");
+        console_print(curr_sleep->name);
+        console_print("\n");
+        curr_sleep = curr_sleep->next;
+    }
 }

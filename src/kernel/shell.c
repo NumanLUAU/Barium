@@ -114,19 +114,19 @@ void ringtest() {
     console_print("starting excruciating ring 3 test\n");
     
     console_print("stage 1: syscall worker... ");
-    uint64_t tid = sched_spawn_user(user_mode_worker, 10);
+    uint64_t tid = sched_spawn_user(user_mode_worker, 10, "scall_worker");
     while (sched_is_alive(tid)) sched_yield();
     
     console_print("stage 2: privilege violation... ");
-    tid = sched_spawn_user(stress_worker_priv, 10);
+    tid = sched_spawn_user(stress_worker_priv, 10, "priv_worker");
     while (sched_is_alive(tid)) sched_yield();
     
     console_print("stage 3: memory violation... ");
-    tid = sched_spawn_user(stress_worker_mem, 10);
+    tid = sched_spawn_user(stress_worker_mem, 10, "mem_worker");
     while (sched_is_alive(tid)) sched_yield();
     
     console_print("stage 4: syscall spam test... ");
-    tid = sched_spawn_user(stress_worker_syscall, 10);
+    tid = sched_spawn_user(stress_worker_syscall, 10, "spam_worker");
     while (sched_is_alive(tid)) sched_yield();
     
     console_print("ring 3 test complete\n");
@@ -432,17 +432,17 @@ void schedtest() {
     console_print("testing sched\n");
     
     console_print("stage 1: integrity\n");
-    sched_spawn(integrity_thread, 10);
-    sched_spawn(integrity_thread, 10);
+    sched_spawn(integrity_thread, 10, "integrity_1");
+    sched_spawn(integrity_thread, 10, "integrity_2");
     b_sleep(1000);
 
     console_print("\nstage 2: priority dominance\n");
     race_counts[0] = race_counts[1] = race_counts[2] = 0;
     finish_order = 1;
     
-    sched_spawn(priority_racer, 31);
-    sched_spawn(priority_racer, 15);
-    sched_spawn(priority_racer, 0);
+    sched_spawn(priority_racer, 31, "p31_racer");
+    sched_spawn(priority_racer, 15, "p15_racer");
+    sched_spawn(priority_racer, 0, "p0_racer");
     
     while (race_counts[0] == 0 || race_counts[1] == 0 || race_counts[2] == 0) {
         __asm__ volatile("hlt");
@@ -459,10 +459,10 @@ void schedtest() {
     console_print("\nstage 3: round-robin\n");
     rr_active = 1;
     rr_counts[0] = rr_counts[1] = rr_counts[2] = 0;
-    sched_spawn(rr_worker, 10);
-    sched_spawn(rr_worker, 10);
-    sched_spawn(rr_worker, 10);
-    sched_spawn(rr_timer, 10);
+    sched_spawn(rr_worker, 10, "rr_1");
+    sched_spawn(rr_worker, 10, "rr_2");
+    sched_spawn(rr_worker, 10, "rr_3");
+    sched_spawn(rr_timer, 10, "rr_timer");
 
     while (rr_active) __asm__ volatile("hlt");
     b_sleep(100);
@@ -475,9 +475,9 @@ void schedtest() {
     console_print("\nstage 4: voluntary preemption\n");
     yield_active = 1;
     yield_counts[0] = yield_counts[1] = 0;
-    sched_spawn(greedy_worker, 10);
-    sched_spawn(polite_worker, 10);
-    sched_spawn(yield_timer, 10);
+    sched_spawn(greedy_worker, 10, "greedy");
+    sched_spawn(polite_worker, 10, "polite");
+    sched_spawn(yield_timer, 10, "yield_timer");
 
     while (yield_active) __asm__ volatile("hlt");
     b_sleep(100);
@@ -487,7 +487,7 @@ void schedtest() {
     console_print_hex(yield_counts[1]); console_newline();
 
     console_print("\nstage 5: memory leaks\n");
-    for (int i = 0; i < 100; i++) sched_spawn(chaos_worker, 5);
+    for (int i = 0; i < 100; i++) sched_spawn(chaos_worker, 5, "chaos");
     
     sched_yield();
     
@@ -496,9 +496,9 @@ void schedtest() {
     console_print("\nstage 6: anti-starvation\n");
     age_active = 1;
     age_counts[0] = age_counts[1] = 0;
-    sched_spawn(greedy_p31, 31);
-    sched_spawn(patient_p0, 0);
-    sched_spawn(age_timer, 31);
+    sched_spawn(greedy_p31, 31, "greedy_p31");
+    sched_spawn(patient_p0, 0, "patient_p0");
+    sched_spawn(age_timer, 31, "age_timer");
 
     while (age_active) __asm__ volatile("hlt");
     b_sleep(100);
@@ -510,9 +510,9 @@ void schedtest() {
     console_print("\nstage 7: blocking sleep\n");
     block_active = 1;
     block_counts[0] = block_counts[1] = 0;
-    sched_spawn(spinner_p10, 10);
-    sched_spawn(sleeper_p10, 10);
-    sched_spawn(block_timer, 10);
+    sched_spawn(spinner_p10, 10, "spinner");
+    sched_spawn(sleeper_p10, 10, "sleeper");
+    sched_spawn(block_timer, 10, "block_timer");
 
     while (block_active) __asm__ volatile("hlt");
     b_sleep(100);
@@ -551,10 +551,11 @@ void shell_run() {
         else if (b_strcmp(cmd, "pmmtest") == 0) pmmtest();
         else if (b_strcmp(cmd, "idttest") == 0) idttest();
         else if (b_strcmp(cmd, "vmmtest") == 0) vmmtest();
+        else if (b_strcmp(cmd, "tasks") == 0) sched_print_tasks();
         else if (b_strcmp(cmd, "heaptest") == 0) heaptest();
         else if (b_strcmp(cmd, "timertest") == 0) timertest();
         else if (b_strcmp(cmd, "schedtest") == 0) schedtest();
-        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
+        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, tasks, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
         else if (pos > 0) console_print("unknown command\n");
     }
 }
