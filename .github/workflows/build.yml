@@ -36,11 +36,18 @@ jobs:
             qemu-system-x86 \
             curl
 
-      - name: Make toolchain script executable
-        run: chmod +x toolchain/build.sh
+      - name: Download toolchain
+        run: |
+          cd ~
 
-      - name: Build toolchain
-        run: ./toolchain/build.sh
+          curl -L \
+            https://github.com/NumanLUAU/barium-toolchain/releases/latest/download/release.zip \
+            -o release.zip
+
+          rm -rf $HOME/barium-toolchain
+          mkdir -p $HOME/barium-toolchain
+
+          unzip release.zip -d $HOME/barium-toolchain
 
       - name: Add toolchain to PATH
         run: |
