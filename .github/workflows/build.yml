@@ -69,7 +69,7 @@ jobs:
 
       - name: Fix permissions
         run: |
-          chmod -R +x $HOME/barium-toolchain/bin
+          find $HOME/barium-toolchain -type f -exec chmod +x {} \;
 
       - name: Build Barium
         run: |
