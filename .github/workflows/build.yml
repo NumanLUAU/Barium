@@ -65,13 +65,16 @@ jobs:
       - name: Add toolchain to PATH
         run: |
           echo "$HOME/barium-toolchain/bin" >> $GITHUB_PATH
+          echo "$HOME/barium-toolchain/libexec/gcc/x86_64-elf/13.2.0" >> $GITHUB_PATH
 
       - name: Fix permissions
         run: |
           chmod -R +x $HOME/barium-toolchain/bin
 
       - name: Build Barium
-        run: make
+        run: |
+          export PATH=$HOME/barium-toolchain/bin:$PATH
+          make
 
       - name: Generate release info
         id: release_info
