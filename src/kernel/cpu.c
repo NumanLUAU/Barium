@@ -12,7 +12,7 @@ void cpu_init() {
     cpu->cpu_id = apic_get_id();
     cpus[cpu_count_actual++] = cpu;
     b_wrmsr(0xC0000101, (uint64_t)cpu); 
-    b_wrmsr(0xC0000102, 0); 
+    b_wrmsr(0xC0000102, (uint64_t)cpu); 
 }
 
 cpu_t *cpu_get() {

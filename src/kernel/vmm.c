@@ -30,6 +30,7 @@ void vmm_init(barium_boot_info_t *info) {
         uint64_t size = desc->number_of_pages * 4096;
 
         for (uint64_t j = 0; j < size; j += 4096) {
+            if (start + j == 0) continue;
             vmm_map(kernel_pml4, start + j, start + j, flags);
         }
     }

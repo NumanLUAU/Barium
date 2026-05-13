@@ -1,14 +1,11 @@
 #include <barium/gdt.h>
 #include <barium/lib.h>
-
-static gdt_entry_t gdt[7] __attribute__((aligned(16)));
-static gdtr_t gdtr;
-static tss_t tss __attribute__((aligned(16)));
+#include <barium/cpu.h>
 
 extern void gdt_load(gdtr_t *ptr);
 extern void tss_load();
 
-void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
+static void gdt_set_entry_at(gdt_entry_t *gdt, int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
     gdt[index].base_low = base & 0xFFFF;
     gdt[index].base_middle = (base >> 16) & 0xFF;
     gdt[index].base_high = (base >> 24) & 0xFF;
@@ -18,48 +15,50 @@ void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uin
     gdt[index].access = access;
 }
 
-void gdt_set_tss(int index, uint64_t base, uint32_t limit) {
+static void gdt_set_tss_at(gdt_entry_t *gdt, int index, uint64_t base, uint32_t limit) {
     gdt_tss_entry_t *tss_entry = (gdt_tss_entry_t*)&gdt[index];
-    gdt_set_entry(index, base & 0xFFFFFFFF, limit, 0x89, 0x40);
+    gdt_set_entry_at(gdt, index, base & 0xFFFFFFFF, limit, 0x89, 0x40);
     tss_entry->base_highest = (base >> 32) & 0xFFFFFFFF;
     tss_entry->reserved = 0;
 }
 
 
 
+
 void gdt_init() {
-    b_memset(gdt, 0, sizeof(gdt));
-    b_memset(&tss, 0, sizeof(tss));
+    cpu_t *cpu = cpu_get();
+    b_memset(cpu->gdt, 0, sizeof(cpu->gdt));
+    b_memset(&cpu->tss, 0, sizeof(cpu->tss));
 
-    gdt_set_entry(0, 0, 0, 0, 0);
-    gdt_set_entry(1, 0, 0xFFFFFFFF, 0x9A, 0xA0);
-    gdt_set_entry(2, 0, 0xFFFFFFFF, 0x92, 0xA0);
-    gdt_set_entry(3, 0, 0xFFFFFFFF, 0xF2, 0xA0);
-    gdt_set_entry(4, 0, 0xFFFFFFFF, 0xFA, 0xA0);
+    gdt_set_entry_at(cpu->gdt, 0, 0, 0, 0, 0);
+    gdt_set_entry_at(cpu->gdt, 1, 0, 0xFFFFFFFF, 0x9A, 0xA0);
+    gdt_set_entry_at(cpu->gdt, 2, 0, 0xFFFFFFFF, 0x92, 0xA0);
+    gdt_set_entry_at(cpu->gdt, 3, 0, 0xFFFFFFFF, 0xF2, 0xA0);
+    gdt_set_entry_at(cpu->gdt, 4, 0, 0xFFFFFFFF, 0xFA, 0xA0);
     
-    gdt_set_tss(5, (uint64_t)&tss, sizeof(tss) - 1);
+    gdt_set_tss_at(cpu->gdt, 5, (uint64_t)&cpu->tss, sizeof(tss_t) - 1);
 
-    gdtr.limit = sizeof(gdt) - 1;
-    gdtr.base = (uint64_t)&gdt;
+    cpu->gdtr.limit = (7 * 8) - 1;
+    cpu->gdtr.base = (uint64_t)cpu->gdt;
 
-    gdt_load(&gdtr);
+    gdt_load(&cpu->gdtr);
     tss_load();
 }
 
 void gdt_init_ap() {
-    gdt_load(&gdtr);
+    gdt_init();
 }
 
 void *gdt_get_base() {
-    return (void*)gdt;
+    return (void*)cpu_get()->gdt;
 }
 
 void *tss_get_ptr() {
-    return (void*)&tss;
+    return (void*)&cpu_get()->tss;
 }
 
 void tss_set_stack(uint64_t stack) {
-    tss.rsp0 = stack;
+    cpu_get()->tss.rsp0 = stack;
 }
 
 

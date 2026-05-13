@@ -8,15 +8,17 @@
 #include <barium/idt.h>
 #include <barium/gdt.h>
 #include <barium/sched.h>
+#include <barium/syscall.h>
 
 extern uint8_t _binary_build_smp_boot_bin_start[];
 extern uint8_t _binary_build_smp_boot_bin_end[];
 
 void smp_ap_entry() {
-    gdt_init_ap();
     cpu_init();
+    gdt_init_ap();
     idt_init_ap();
     apic_init_ap();
+    syscall_init();
     sched_init();
     
     smp_data_t *data = (smp_data_t*)0x7000;

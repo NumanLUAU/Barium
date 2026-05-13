@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include <barium/lib.h>
+#include <barium/gdt.h>
 
 struct thread;
 
@@ -14,6 +15,9 @@ typedef struct {
     struct thread *ready_queues[32];
     spinlock_t sched_lock;
     uint32_t cpu_id;
+    gdt_entry_t gdt[16] __attribute__((aligned(16)));
+    gdtr_t gdtr;
+    tss_t tss __attribute__((aligned(16)));
 } cpu_t;
 
 void cpu_init();

@@ -19,7 +19,6 @@ void kmain(barium_boot_info_t *info) {
     console_clear(0x1B1B1B);
     console_print("barium kernel v0.4\n");
 
-    gdt_init();
     pmm_init(info);
     idt_init();
     vmm_init(info);
@@ -28,6 +27,7 @@ void kmain(barium_boot_info_t *info) {
     alpc_init();
     apic_init(info);
     cpu_init();
+    gdt_init();
     syscall_init();
     smp_init();
     apic_init_ap();

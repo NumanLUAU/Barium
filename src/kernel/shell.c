@@ -534,19 +534,25 @@ static spinlock_t worker_lock;
 
 static void core_worker() {
     uint32_t id = apic_get_id();
-    console_print("worker starting on core ");
-    console_print_num(id);
-    console_print("\n");
+    uint64_t c_flags = console_lock_acquire();
+    console_print_unlocked("worker starting on core ");
+    console_print_num_unlocked(id);
+    console_print_unlocked("\n");
+    console_lock_release(c_flags);
 
     for (int i = 0; i < 5; i++) {
         b_sleep(500);
         id = apic_get_id();
-        console_print("core ");
-        console_print_num(id);
-        console_print(" tick\n");
+        c_flags = console_lock_acquire();
+        console_print_unlocked("core ");
+        console_print_num_unlocked(id);
+        console_print_unlocked(" tick\n");
+        console_lock_release(c_flags);
     }
     
-    console_print("worker done\n");
+    c_flags = console_lock_acquire();
+    console_print_unlocked("worker done\n");
+    console_lock_release(c_flags);
     
     uint64_t flags = b_irq_save();
     spin_lock(&worker_lock);
