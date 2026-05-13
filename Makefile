@@ -28,7 +28,8 @@ KERN_SRCS = src/kernel/kernel.c \
             src/kernel/cpu.c \
             src/kernel/syscall.c \
             src/kernel/acpi.c \
-            src/kernel/smp.c
+            src/kernel/smp.c \
+            src/kernel/alpc.c
 KERN_OBJS = build/entry.o \
             build/interrupt.o \
             build/syscall_entry.o \

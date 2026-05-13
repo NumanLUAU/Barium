@@ -95,19 +95,21 @@ uint64_t interrupt_handler(uint64_t rsp) {
             console_print("user exception: ");
             console_print(exception_messages[int_no]);
             console_print(" at ");
-            console_print_hex(ctx->rip);
+            console_print_num(ctx->rip);
+            console_newline();
+            console_print("fault at rip ");
+            console_print_num(ctx->rip);
             console_newline();
             sched_exit();
+        } else {
+            console_print("exception ");
+            console_print_num(int_no);
+            console_print(" err ");
+            console_print_num(ctx->err_code);
+            console_print(" rip ");
+            console_print_num(ctx->rip);
+            console_newline();
         }
-        console_clear(0x8B0000);
-        console_print("kernel panic\n");
-        console_print("exception: ");
-        console_print(exception_messages[int_no]);
-        console_print("\nerror code: ");
-        console_print_hex(ctx->err_code);
-        console_print("\nrip: ");
-        console_print_hex(ctx->rip);
-        console_print("\nhalted\n");
         while(1) __asm__ volatile("hlt");
     }
 

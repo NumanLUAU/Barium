@@ -320,8 +320,8 @@ int sched_is_alive(uint64_t tid) {
 }
 
 void sched_print_tasks() {
-    console_print("tid      pri  core state     name\n");
-    console_print("----------------------------------\n");
+    console_print("tid pri core state name\n");
+    console_print("------------------------\n");
     
     for (int i = 0; i < cpu_get_count(); i++) {
         cpu_t *cpu = cpu_get_by_index(i);
@@ -329,12 +329,12 @@ void sched_print_tasks() {
         spin_lock(&cpu->sched_lock);
 
         if (cpu->sched_thread) {
-            console_print_hex(cpu->sched_thread->tid);
-            console_print("  ");
-            console_print_hex(cpu->sched_thread->priority);
-            console_print("  ");
-            console_print_hex(cpu->cpu_id);
-            console_print("  running   ");
+            console_print_num(cpu->sched_thread->tid);
+            console_print(" ");
+            console_print_num(cpu->sched_thread->priority);
+            console_print(" ");
+            console_print_num(cpu->cpu_id);
+            console_print(" running ");
             console_print(cpu->sched_thread->name);
             console_print("\n");
         }
@@ -342,12 +342,12 @@ void sched_print_tasks() {
         for (int p = 0; p <= MAX_PRIORITY; p++) {
             thread_t *curr = cpu->ready_queues[p];
             while (curr) {
-                console_print_hex(curr->tid);
-                console_print("  ");
-                console_print_hex(curr->priority);
-                console_print("  ");
-                console_print_hex(cpu->cpu_id);
-                console_print("  ready     ");
+                console_print_num(curr->tid);
+                console_print(" ");
+                console_print_num(curr->priority);
+                console_print(" ");
+                console_print_num(cpu->cpu_id);
+                console_print(" ready ");
                 console_print(curr->name);
                 console_print("\n");
                 curr = curr->next;
@@ -356,12 +356,12 @@ void sched_print_tasks() {
 
         thread_t *curr_sleep = cpu_extras[cpu->cpu_id].sleep_queue;
         while (curr_sleep) {
-            console_print_hex(curr_sleep->tid);
-            console_print("  ");
-            console_print_hex(curr_sleep->priority);
-            console_print("  ");
-            console_print_hex(cpu->cpu_id);
-            console_print("  sleeping  ");
+            console_print_num(curr_sleep->tid);
+            console_print(" ");
+            console_print_num(curr_sleep->priority);
+            console_print(" ");
+            console_print_num(cpu->cpu_id);
+            console_print(" sleeping ");
             console_print(curr_sleep->name);
             console_print("\n");
             curr_sleep = curr_sleep->next;
@@ -370,4 +370,46 @@ void sched_print_tasks() {
         spin_unlock(&cpu->sched_lock);
         b_irq_restore(flags);
     }
+}
+
+void sched_handoff(uint64_t tid) {
+    if (tid == 0) return;
+    
+    uint64_t flags = b_irq_save();
+    cpu_t *this_cpu = cpu_get();
+    thread_t *target = NULL;
+
+    for (int i = 0; i < cpu_get_count(); i++) {
+        cpu_t *cpu = cpu_get_by_index(i);
+        spin_lock(&cpu->sched_lock);
+        for (int p = MAX_PRIORITY; p >= 0; p--) {
+            thread_t *prev = NULL;
+            thread_t *curr = cpu->ready_queues[p];
+            while (curr) {
+                if (curr->tid == tid) {
+                    if (prev) prev->next = curr->next;
+                    else cpu->ready_queues[p] = curr->next;
+                    target = curr;
+                    break;
+                }
+                prev = curr;
+                curr = curr->next;
+            }
+            if (target) break;
+        }
+        spin_unlock(&cpu->sched_lock);
+        if (target) break;
+    }
+
+    if (target) {
+        spin_lock(&this_cpu->sched_lock);
+        target->priority = MAX_PRIORITY;
+        target->core_affinity = (uint8_t)this_cpu->cpu_id;
+        target->next = this_cpu->ready_queues[MAX_PRIORITY];
+        this_cpu->ready_queues[MAX_PRIORITY] = target;
+        spin_unlock(&this_cpu->sched_lock);
+    }
+
+    b_irq_restore(flags);
+    if (target) sched_yield();
 }

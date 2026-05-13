@@ -48,4 +48,6 @@ void sched_exit();
 void sched_yield();
 void sched_sleep(uint64_t ms);
 
+void sched_handoff(uint64_t tid);
+
 #endif

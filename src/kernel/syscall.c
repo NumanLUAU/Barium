@@ -12,9 +12,13 @@ void syscall_handler(uint64_t syscall_no, uint64_t arg1, uint64_t arg2, uint64_t
         console_newline();
     } else if (syscall_no == 2) {
         sched_exit();
+    } else if (syscall_no >= 256) {
+        console_print("bad syscall ");
+        console_print_num(syscall_no);
+        console_newline();
     } else {
-        console_print("unknown syscall: ");
-        console_print_hex(syscall_no);
+        console_print("unknown syscall ");
+        console_print_num(syscall_no);
         console_newline();
     }
 }

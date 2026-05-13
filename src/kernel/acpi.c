@@ -38,8 +38,8 @@ void acpi_init(void *rsdp_ptr) {
         ptr += entry->length;
     }
 
-    console_print("acpi: found ");
-    console_print_hex(cpu_count);
+    console_print("acpi: ");
+    console_print_num(cpu_count);
     console_print(" cores\n");
 }
 

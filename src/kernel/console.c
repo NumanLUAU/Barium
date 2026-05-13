@@ -106,10 +106,11 @@ void console_print(const char *s) {
     b_irq_restore(flags);
 }
 
-void console_print_hex(uint64_t val) {
+
+void console_print_num(uint64_t val) {
     uint64_t flags = b_irq_save();
     spin_lock(&console_lock);
-    console_print_hex_unlocked(val);
+    console_print_num_unlocked(val);
     spin_unlock(&console_lock);
     b_irq_restore(flags);
 }
@@ -118,13 +119,19 @@ void console_print_unlocked(const char *s) {
     while (*s) console_putchar_unlocked(*s++, 0xFFFFFF);
 }
 
-void console_print_hex_unlocked(uint64_t val) {
-    const char *hex = "0123456789ABCDEF";
-    console_putchar_unlocked('0', 0xFFFFFF);
-    console_putchar_unlocked('x', 0xFFFFFF);
-    for (int i = 60; i >= 0; i -= 4) {
-        console_putchar_unlocked(hex[(val >> i) & 0xF], 0xFFFFFF);
+
+void console_print_num_unlocked(uint64_t val) {
+    if (val == 0) {
+        console_putchar_unlocked('0', 0xFFFFFF);
+        return;
     }
+    char buf[32];
+    int i = 0;
+    while (val > 0) {
+        buf[i++] = (val % 10) + '0';
+        val /= 10;
+    }
+    while (--i >= 0) console_putchar_unlocked(buf[i], 0xFFFFFF);
 }
 
 uint64_t console_lock_acquire() {

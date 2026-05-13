@@ -10,6 +10,7 @@
 #include <barium/sched.h>
 #include <barium/syscall.h>
 #include <barium/acpi.h>
+#include <barium/alpc.h>
 
 extern uint64_t get_cs();
 extern uint64_t get_ds();
@@ -41,9 +42,9 @@ void gdttest() {
     uint64_t cs = get_cs();
     uint64_t ds = get_ds();
     console_print("cs=");
-    console_print_hex(cs);
+    console_print_num(cs);
     console_print(" ds=");
-    console_print_hex(ds);
+    console_print_num(ds);
     console_newline();
 
     console_print("flushing segments\n");
@@ -73,15 +74,15 @@ void tsstest() {
     console_print("testing tss\n");
     uint16_t tr = (uint16_t)get_tr();
     console_print("tr=");
-    console_print_hex(tr);
+    console_print_num(tr);
     console_newline();
 
     uint64_t tss_lar = get_lar(0x28);
     uint64_t tss_lsl = get_lsl(0x28);
     console_print("lar=");
-    console_print_hex(tss_lar);
+    console_print_num(tss_lar);
     console_print(" lsl=");
-    console_print_hex(tss_lsl);
+    console_print_num(tss_lsl);
     console_newline();
 
     if (tss_lsl == 103) console_print("limit ok\n");
@@ -112,13 +113,13 @@ void stress_worker_syscall() {
 }
 
 void ringtest() {
-    console_print("starting excruciating ring 3 test\n");
+    console_print("starting ring 3 test\n");
     
-    console_print("stage 1: syscall worker... ");
+    console_print("syscall worker... ");
     uint64_t tid = sched_spawn_user(user_mode_worker, 10, "scall_worker");
     while (sched_is_alive(tid)) sched_yield();
     
-    console_print("stage 2: privilege violation... ");
+    console_print("privilege check... ");
     tid = sched_spawn_user(stress_worker_priv, 10, "priv_worker");
     while (sched_is_alive(tid)) sched_yield();
     
@@ -126,7 +127,7 @@ void ringtest() {
     tid = sched_spawn_user(stress_worker_mem, 10, "mem_worker");
     while (sched_is_alive(tid)) sched_yield();
     
-    console_print("stage 4: syscall spam test... ");
+    console_print("stack test... ");
     tid = sched_spawn_user(stress_worker_syscall, 10, "spam_worker");
     while (sched_is_alive(tid)) sched_yield();
     
@@ -138,9 +139,9 @@ void pmmtest() {
     uint64_t total = pmm_get_total_memory();
     uint64_t free = pmm_get_free_memory();
     console_print("ram=");
-    console_print_hex(total);
+    console_print_num(total);
     console_print(" free=");
-    console_print_hex(free);
+    console_print_num(free);
     console_newline();
 
     console_print("stage 1: alloc\n");
@@ -182,7 +183,7 @@ void vmmtest() {
 
     pml4_t *pml4 = vmm_get_kernel_pml4();
     console_print("pml4=");
-    console_print_hex((uint64_t)pml4);
+    console_print_num((uint64_t)pml4);
     void *phys_page = pmm_alloc(1);
     
     console_print("stage 1: alias\n");
@@ -258,7 +259,7 @@ void heaptest() {
 void timertest() {
     console_print("testing timer\n");
     console_print("ticks=");
-    console_print_hex(apic_get_ticks());
+    console_print_num(apic_get_ticks());
     console_newline();
 
     console_print("stage 1: sleep\n");
@@ -268,7 +269,7 @@ void timertest() {
     uint64_t diff = end - start;
     
     console_print("diff=");
-    console_print_hex(diff);
+    console_print_num(diff);
     console_newline();
     
     if (diff >= 50 && diff <= 52) console_print("precision ok\n");
@@ -314,18 +315,18 @@ void integrity_thread() {
 
     if (!failed) {
         console_print("tid ");
-        console_print_hex(tid);
+        console_print_num(tid);
         console_print(" ok\n");
         sched_exit();
     } else {
         console_print("tid ");
-        console_print_hex(tid);
+        console_print_num(tid);
         console_print(" broke! reg=");
-        console_print_hex(failed);
+        console_print_num(failed);
         console_print(" val=");
-        console_print_hex(badval);
+        console_print_num(badval);
         console_print(" exp=");
-        console_print_hex(magic);
+        console_print_num(magic);
         console_newline();
         while(1);
     }
@@ -450,11 +451,11 @@ void schedtest() {
     }
     
     console_print("finish order: ");
-    console_print_hex(race_counts[1]); 
+    console_print_num(race_counts[1]); 
     console_print(" / ");
-    console_print_hex(race_counts[2]);
+    console_print_num(race_counts[2]);
     console_print(" / ");
-    console_print_hex(race_counts[0]);
+    console_print_num(race_counts[0]);
     console_newline();
 
     console_print("\nstage 3: round-robin\n");
@@ -468,12 +469,12 @@ void schedtest() {
     while (rr_active) __asm__ volatile("hlt");
     b_sleep(100);
 
-    console_print("executions:\n");
-    console_print_hex(rr_counts[0]); console_print(" / ");
-    console_print_hex(rr_counts[1]); console_print(" / ");
-    console_print_hex(rr_counts[2]); console_newline();
+    console_print("runs:\n");
+    console_print_num(rr_counts[0]); console_print(" / ");
+    console_print_num(rr_counts[1]); console_print(" / ");
+    console_print_num(rr_counts[2]); console_newline();
 
-    console_print("\nstage 4: voluntary preemption\n");
+    console_print("\nstage 4: preemption\n");
     yield_active = 1;
     yield_counts[0] = yield_counts[1] = 0;
     sched_spawn(greedy_worker, 10, "greedy");
@@ -484,8 +485,8 @@ void schedtest() {
     b_sleep(100);
 
     console_print("counts:\n");
-    console_print_hex(yield_counts[0]); console_print(" / ");
-    console_print_hex(yield_counts[1]); console_newline();
+    console_print_num(yield_counts[0]); console_print(" / ");
+    console_print_num(yield_counts[1]); console_newline();
 
     console_print("\nstage 5: memory leaks\n");
     for (int i = 0; i < 100; i++) sched_spawn(chaos_worker, 5, "chaos");
@@ -505,8 +506,8 @@ void schedtest() {
     b_sleep(100);
 
     console_print("counts:\n");
-    console_print_hex(age_counts[0]); console_print(" / ");
-    console_print_hex(age_counts[1]); console_newline();
+    console_print_num(age_counts[0]); console_print(" / ");
+    console_print_num(age_counts[1]); console_newline();
 
     console_print("\nstage 7: blocking sleep\n");
     block_active = 1;
@@ -519,8 +520,8 @@ void schedtest() {
     b_sleep(100);
 
     console_print("counts:\n");
-    console_print_hex(block_counts[0]); console_print(" / ");
-    console_print_hex(block_counts[1]); console_newline();
+    console_print_num(block_counts[0]); console_print(" / ");
+    console_print_num(block_counts[1]); console_newline();
 
     console_print("\nstage 8\n");
     console_print("done\n");
@@ -534,14 +535,14 @@ static spinlock_t worker_lock;
 static void core_worker() {
     uint32_t id = apic_get_id();
     console_print("worker starting on core ");
-    console_print_hex(id);
+    console_print_num(id);
     console_print("\n");
 
     for (int i = 0; i < 5; i++) {
         b_sleep(500);
         id = apic_get_id();
         console_print("core ");
-        console_print_hex(id);
+        console_print_num(id);
         console_print(" tick\n");
     }
     
@@ -556,15 +557,95 @@ static void core_worker() {
     sched_exit();
 }
 
+
+static volatile int alpc_test_done = 0;
+static volatile int alpc_messages_received = 0;
+static spinlock_t alpc_test_lock;
+
+void alpc_stress_server() {
+    uint64_t port = alpc_create_port("test_port", 64);
+    alpc_message_t msg;
+    
+    while (alpc_messages_received < 1000) {
+        if (alpc_recv(port, &msg) == 0) {
+            if (msg.type == ALPC_MSG_SECTION) {
+                char *data = (char*)alpc_map_section(msg.section_id);
+                if (data[0] != 'X') {
+                    console_print("integrity failure in section!\n");
+                }
+            }
+            
+            uint64_t flags = b_irq_save();
+            spin_lock(&alpc_test_lock);
+            alpc_messages_received++;
+            if (alpc_messages_received % 100 == 0) {
+                console_print("received ");
+                console_print_num(alpc_messages_received);
+                console_print(" messages\n");
+            }
+            spin_unlock(&alpc_test_lock);
+            b_irq_restore(flags);
+        } else {
+            sched_yield();
+        }
+    }
+    
+    alpc_test_done = 1;
+    sched_exit();
+}
+
+void alpc_stress_client() {
+    uint64_t port = 0;
+    while ((port = alpc_connect_port("test_port")) == 0) sched_yield();
+    
+    for (int i = 0; i < 100; i++) {
+        alpc_message_t msg;
+        if (i % 10 == 0) {
+            msg.type = ALPC_MSG_SECTION;
+            msg.section_id = alpc_create_section(4096);
+            char *data = (char*)alpc_map_section(msg.section_id);
+            b_memset(data, 'X', 4096);
+        } else {
+            msg.type = ALPC_MSG_SMALL;
+            b_strcpy((char*)msg.data, "stress-ping");
+        }
+        
+        while (alpc_send(port, &msg) != 0) {
+            sched_yield();
+        }
+    }
+    
+    sched_exit();
+}
+
+void shstest() {
+    console_print("starting alpc test\n");
+    alpc_test_done = 0;
+    alpc_messages_received = 0;
+    alpc_test_lock.lock = 0;
+    
+    sched_spawn(alpc_stress_server, 20, "stress_srv");
+    
+    for (int i = 0; i < 10; i++) {
+        sched_spawn(alpc_stress_client, 10, "stress_cli");
+    }
+    
+    while (!alpc_test_done) {
+        sched_yield();
+    }
+    
+    console_print("shstest done\n");
+}
+
 void coretest() {
     uint32_t count = acpi_get_cpu_count();
     uint32_t workers = count * 2;
 
     uint64_t c_flags = console_lock_acquire();
-    console_print_unlocked("detected ");
-    console_print_hex_unlocked(count);
+    console_print_unlocked("found ");
+    console_print_num_unlocked(count);
     console_print_unlocked(" cores. spawning ");
-    console_print_hex_unlocked(workers);
+    console_print_num_unlocked(workers);
     console_print_unlocked(" workers\n");
     console_lock_release(c_flags);
 
@@ -611,7 +692,8 @@ void shell_run() {
         else if (b_strcmp(cmd, "timertest") == 0) timertest();
         else if (b_strcmp(cmd, "schedtest") == 0) schedtest();
         else if (b_strcmp(cmd, "coretest") == 0) coretest();
-        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, tasks, coretest, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest\n");
+        else if (b_strcmp(cmd, "shstest") == 0) shstest();
+        else if (b_strcmp(cmd, "help") == 0) console_print("commands: help, tasks, coretest, gdttest, tsstest, ringtest, pmmtest, idttest, vmmtest, heaptest, timertest, schedtest, shstest\n");
         else if (pos > 0) console_print("unknown command\n");
     }
 }

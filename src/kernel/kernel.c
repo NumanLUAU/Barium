@@ -12,6 +12,7 @@
 #include <barium/pmm.h>
 #include <barium/acpi.h>
 #include <barium/smp.h>
+#include <barium/alpc.h>
 
 void kmain(barium_boot_info_t *info) {
     console_init(info);
@@ -24,6 +25,7 @@ void kmain(barium_boot_info_t *info) {
     vmm_init(info);
     acpi_init(info->rsdp);
     heap_init();
+    alpc_init();
     apic_init(info);
     cpu_init();
     syscall_init();

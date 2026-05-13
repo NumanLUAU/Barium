@@ -42,7 +42,7 @@ void smp_init() {
         if (lapic_id == bsp_id) continue;
 
         console_print("waking core ");
-        console_print_hex(lapic_id);
+        console_print_num(lapic_id);
         console_print("... ");
 
         data->stack_top = (uint64_t)kmalloc(8192) + 8192;
