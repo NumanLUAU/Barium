@@ -4,6 +4,7 @@
 
 static uint8_t *bitmap;
 static uint64_t total_pages;
+static uint64_t usable_pages;
 static uint64_t free_pages;
 static uint64_t last_search_index = 0;
 static uint64_t highest_phys_address = 0;
@@ -55,10 +56,12 @@ void pmm_init(barium_boot_info_t *info) {
 
     b_memset(bitmap, 0xFF, bitmap_size);
     free_pages = 0;
+    usable_pages = 0;
 
     for (uint64_t i = 0; i < desc_count; i++) {
         b_efi_mem_desc *desc = (b_efi_mem_desc*)((uint64_t)mmap + (i * info->descriptor_size));
         if (desc->type == 7) {
+            usable_pages += desc->number_of_pages;
             for (uint64_t j = 0; j < desc->number_of_pages; j++) {
                 uint64_t page = (desc->physical_start / 4096) + j;
                 bitmap_clear(page);
@@ -147,6 +150,6 @@ void pmm_free(void *ptr, uint64_t count) {
 }
 
 uint64_t pmm_get_free_memory() { return free_pages * 4096; }
-uint64_t pmm_get_used_memory() { return (total_pages - free_pages) * 4096; }
-uint64_t pmm_get_total_memory() { return total_pages * 4096; }
+uint64_t pmm_get_used_memory() { return (usable_pages - free_pages) * 4096; }
+uint64_t pmm_get_total_memory() { return usable_pages * 4096; }
 uint64_t pmm_get_highest_address() { return highest_phys_address; }
