@@ -1,0 +1,93 @@
+name: Build BariumOS
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            bison \
+            flex \
+            libgmp3-dev \
+            libmpfr-dev \
+            libmpc-dev \
+            texinfo \
+            make \
+            nasm \
+            gcc-mingw-w64-x86-64 \
+            mtools \
+            dosfstools \
+            qemu-system-x86 \
+            curl
+
+      - name: Make toolchain script executable
+        run: chmod +x toolchain/build.sh
+
+      - name: Build toolchain
+        run: ./toolchain/build.sh
+
+      - name: Add toolchain to PATH
+        run: |
+          echo "$HOME/barium-toolchain/bin" >> $GITHUB_PATH
+
+      - name: Build Barium
+        run: make
+
+      - name: Generate release info
+        id: release_info
+        shell: bash
+        run: |
+          DATE=$(date +'%d-%m-%y')
+          BASE="Release $DATE"
+
+          TAG_COUNT=$(gh release list --limit 100 | grep -c "$BASE" || true)
+
+          if [ "$TAG_COUNT" -eq 0 ]; then
+            RELEASE_NAME="$BASE"
+          else
+            NEXT=$((TAG_COUNT + 1))
+            RELEASE_NAME="$BASE v$NEXT"
+          fi
+
+          SAFE_TAG=$(echo "$RELEASE_NAME" | tr ' ' '-')
+
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+
+          echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "tag_name=$SAFE_TAG" >> $GITHUB_OUTPUT
+
+          {
+            echo "body<<EOF"
+            echo "Build of commit:"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          name: ${{ steps.release_info.outputs.release_name }}
+          body: ${{ steps.release_info.outputs.body }}
+          files: barium.img
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
