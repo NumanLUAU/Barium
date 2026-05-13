@@ -53,6 +53,10 @@ jobs:
         run: |
           echo "$HOME/barium-toolchain/bin" >> $GITHUB_PATH
 
+      - name: Fix permissions
+        run: |
+          chmod -R +x $HOME/barium-toolchain/bin
+
       - name: Build Barium
         run: make
 
