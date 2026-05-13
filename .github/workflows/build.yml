@@ -17,6 +17,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Fix slow Ubuntu mirror
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/*.list || true
+      
+          sudo apt-get update
+
       - name: Install dependencies
         run: |
           sudo apt update
