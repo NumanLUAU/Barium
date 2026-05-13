@@ -28,6 +28,7 @@ void pmm_init(barium_boot_info_t *info) {
 
     for (uint64_t i = 0; i < desc_count; i++) {
         b_efi_mem_desc *desc = (b_efi_mem_desc*)((uint64_t)mmap + (i * info->descriptor_size));
+        if (desc->type != 7) continue;
         uint64_t end = desc->physical_start + (desc->number_of_pages * 4096);
         if (end > memory_end) memory_end = end;
     }
@@ -84,7 +85,8 @@ void pmm_init(barium_boot_info_t *info) {
 void *pmm_alloc(uint64_t count) {
     uint64_t flags = b_irq_save();
     spin_lock(&pmm_lock);
-    for (uint64_t i = 0; i < total_pages - count; i++) {
+    uint64_t start_index = last_search_index;
+    for (uint64_t i = start_index; i < total_pages - count; i++) {
         int found = 1;
         for (uint64_t j = 0; j < count; j++) {
             if (bitmap_test(i + j)) {
@@ -99,6 +101,29 @@ void *pmm_alloc(uint64_t count) {
                 bitmap_set(i + j);
             }
             free_pages -= count;
+            last_search_index = i + count;
+            spin_unlock(&pmm_lock);
+            b_irq_restore(flags);
+            return (void*)(i * 4096);
+        }
+    }
+
+    for (uint64_t i = 0; i < start_index; i++) {
+        int found = 1;
+        for (uint64_t j = 0; j < count; j++) {
+            if (bitmap_test(i + j)) {
+                found = 0;
+                i += j;
+                break;
+            }
+        }
+
+        if (found) {
+            for (uint64_t j = 0; j < count; j++) {
+                bitmap_set(i + j);
+            }
+            free_pages -= count;
+            last_search_index = i + count;
             spin_unlock(&pmm_lock);
             b_irq_restore(flags);
             return (void*)(i * 4096);

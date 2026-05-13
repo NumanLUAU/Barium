@@ -13,6 +13,7 @@ static uint32_t next_cpu_index = 0;
 
 typedef struct {
     thread_t *sleep_queue;
+    uint64_t last_age_tick;
 } cpu_extra_t;
 
 static cpu_extra_t cpu_extras[64];
@@ -148,6 +149,10 @@ uint64_t sched_spawn_user(void (*entry)(), uint8_t priority, char *name) {
 }
 
 static void sched_age_threads(cpu_t *cpu) {
+    uint64_t current_tick = apic_get_ticks();
+    if (current_tick - cpu_extras[cpu->cpu_id].last_age_tick < 20) return;
+    cpu_extras[cpu->cpu_id].last_age_tick = current_tick;
+
     for (int p = 0; p < MAX_PRIORITY; p++) {
         thread_t *prev = NULL;
         thread_t *curr = cpu->ready_queues[p];

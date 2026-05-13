@@ -4,6 +4,7 @@
 static char kbd_buffer[128];
 static uint32_t kbd_head = 0;
 static uint32_t kbd_tail = 0;
+static spinlock_t kbd_lock;
 
 static const char scancode_table[] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
@@ -15,6 +16,7 @@ static const char scancode_table[] = {
 void keyboard_init() {
     kbd_head = 0;
     kbd_tail = 0;
+    kbd_lock.lock = 0;
 
     for (int i = 0; i < 1000 && (b_inb(0x64) & 1); i++) {
         b_inb(0x60);
@@ -35,18 +37,30 @@ void keyboard_handler() {
     if (scancode < sizeof(scancode_table)) {
         char c = scancode_table[scancode];
         if (c != 0) {
+            uint64_t flags = b_irq_save();
+            spin_lock(&kbd_lock);
             uint32_t next = (kbd_head + 1) % 128;
             if (next != kbd_tail) {
                 kbd_buffer[kbd_head] = c;
                 kbd_head = next;
             }
+            spin_unlock(&kbd_lock);
+            b_irq_restore(flags);
         }
     }
 }
 
 char keyboard_get_char() {
-    if (kbd_head == kbd_tail) return 0;
+    uint64_t flags = b_irq_save();
+    spin_lock(&kbd_lock);
+    if (kbd_head == kbd_tail) {
+        spin_unlock(&kbd_lock);
+        b_irq_restore(flags);
+        return 0;
+    }
     char c = kbd_buffer[kbd_tail];
     kbd_tail = (kbd_tail + 1) % 128;
+    spin_unlock(&kbd_lock);
+    b_irq_restore(flags);
     return c;
 }
